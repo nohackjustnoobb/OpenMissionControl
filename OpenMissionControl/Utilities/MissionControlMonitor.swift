@@ -116,8 +116,8 @@ class MissionControlMonitor {
 /// Recovers the `MissionControlMonitor` instance from `refcon` and
 /// forwards the notification to `notifyHandlerIfNeeded`.
 private func axObserverCallback(
-    _ observer: AXObserver,
-    _ element: AXUIElement,
+    _: AXObserver,
+    _: AXUIElement,
     _ notification: CFString,
     _ refcon: UnsafeMutableRawPointer?
 ) {

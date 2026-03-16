@@ -102,11 +102,21 @@ final class OpenMissionControlCore: ObservableObject {
             return false
         }
 
+        if hoveredWindow != nil {
+            logger.debug("Captured left click on hovered window at (\(location.x), \(location.y))")
+            hideOverlay()
+        }
+
         return true
     }
 
     private func handleMouseMove(to location: CGPoint) {
         guard isOverlayShown else { return }
+
+        let screenHeight = NSScreen.screens.first?.frame.height ?? NSScreen.main?.frame.height ?? 0
+        if location.y < screenHeight / 3.0 {
+            fetchWindows()
+        }
 
         updateOverlay(at: location)
     }

@@ -18,8 +18,8 @@
 
 ## Planned Features
 
-- [ ] Installer
-- [ ] App Icon
+- [x] Installer
+- [x] App Icon
 - [ ] Update Checker
 - [ ] Animations for overlay
 - [ ] Support for multiple monitors

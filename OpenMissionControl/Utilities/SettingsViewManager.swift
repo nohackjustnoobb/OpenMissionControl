@@ -31,7 +31,8 @@ class SettingsViewManager: NSObject, ObservableObject {
             window.isReleasedWhenClosed = true
             window.delegate = self
             window.titlebarAppearsTransparent = true
-            window.title = "Open Mission Control"
+            window.title = Bundle.main.infoDictionary?["CFBundleDisplayName"] as? String ?? "Open Mission Control"
+            window.toolbar = NSToolbar()
 
             settingsWindowController = NSWindowController(window: window)
         }

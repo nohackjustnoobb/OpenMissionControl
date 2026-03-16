@@ -1,0 +1,45 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*" # Triggers on tags like v1.0.0, v2.1, etc.
+
+jobs:
+  build-and-release:
+    runs-on: macos-latest
+    permissions:
+      contents: write # Required to create a GitHub Release
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Setup Node.js (for create-dmg)
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Build and Create DMG
+        run: |
+          chmod +x build.sh
+          ./build.sh
+
+      - name: Upload .app Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: OpenMissionControl.app
+          path: build/Build/Products/Release/OpenMissionControl.app
+
+      - name: Upload Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: "*.dmg" # Automatically grabs the output DMG
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

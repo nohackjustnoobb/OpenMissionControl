@@ -125,7 +125,7 @@ class MouseEventMonitor {
                     lastLocation = location
                     self.handleMove(to: location)
                 }
-                Thread.sleep(forTimeInterval: 0.05) // ~20 Hz
+                Thread.sleep(forTimeInterval: 0.1) // ~10 Hz
             }
         }
         thread.name = "MouseMovePoller"

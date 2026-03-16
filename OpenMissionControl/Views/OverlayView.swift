@@ -36,7 +36,6 @@ struct OverlayView: View {
             Capsule()
                 .stroke(Color.primary.opacity(0.15), lineWidth: 0.5)
         )
-        .shadow(color: .black.opacity(0.12), radius: 6, x: 0, y: 3)
     }
 
     private func trafficLight(color: Color, icon: String, iconSize: CGFloat) -> some View {
