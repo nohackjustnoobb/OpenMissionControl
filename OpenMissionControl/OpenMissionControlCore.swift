@@ -20,18 +20,14 @@ final class OpenMissionControlCore: ObservableObject {
     static let shared = OpenMissionControlCore()
     private let logger = Logger(subsystem: "dev.travisxu.OpenMissionControl", category: "OpenMissionControlCore")
 
-    // MARK: - Published Properties
-
-    @Published private(set) var isRunning: Bool = false
-    @Published private(set) var isOverlayShown: Bool = false
-    @Published private(set) var isOverlayHovered: Bool = false
-
     // MARK: - Window State
 
     private var windows: [[String: Any]] = []
+    private var windowFetchTimer: Timer?
 
     // MARK: - Lifecycle
 
+    @Published private(set) var isRunning: Bool = false
     func start() {
         guard !isRunning else { return }
 
@@ -59,12 +55,21 @@ final class OpenMissionControlCore: ObservableObject {
             self.handleMouseMove(to: location)
         }
 
+        // Listen for active space changes to refresh window list and overlay
+        NSWorkspace.shared.notificationCenter.addObserver(
+            self,
+            selector: #selector(activeSpaceDidChange),
+            name: NSWorkspace.activeSpaceDidChangeNotification,
+            object: nil
+        )
+
         logger.info("OpenMissionControlCore started.")
     }
 
     func stop() {
         MissionControlMonitor.shared.stop()
         MouseEventMonitor.shared.stop()
+        NSWorkspace.shared.notificationCenter.removeObserver(self)
         hideOverlay()
         isRunning = false
 
@@ -81,13 +86,22 @@ final class OpenMissionControlCore: ObservableObject {
         logger.info("Mission Control state changed: \(state.rawValue)")
 
         if state.isActive {
-            fetchWindows()
             isOverlayShown = true
             showOverlay()
         } else {
             isOverlayShown = false
             hideOverlay()
         }
+    }
+
+    // MARK: - Active Space Change Handling
+
+    @objc private func activeSpaceDidChange() {
+        guard isOverlayShown else { return }
+
+        logger.info("Active space changed, recreating windows and overlay.")
+
+        recreateOverlay()
     }
 
     // MARK: - Mouse Event Handling
@@ -111,13 +125,6 @@ final class OpenMissionControlCore: ObservableObject {
     }
 
     private func handleMouseMove(to location: CGPoint) {
-        guard isOverlayShown else { return }
-
-        let screenHeight = NSScreen.screens.first?.frame.height ?? NSScreen.main?.frame.height ?? 0
-        if location.y < screenHeight / 3.0 {
-            fetchWindows()
-        }
-
         updateOverlay(at: location)
     }
 
@@ -134,21 +141,27 @@ final class OpenMissionControlCore: ObservableObject {
             window[kCGWindowLayer as String] as? Int == 0
         }
 
-        // Debug output
-        logger.debug("=== Windows (\(filteredWindows.count)) ===")
-        for (index, window) in filteredWindows.enumerated() {
-            let name = window[kCGWindowName as String] as? String ?? "Unknown"
-            let owner = window[kCGWindowOwnerName as String] as? String ?? "Unknown"
-            let bounds = window[kCGWindowBounds as String] as? [String: CGFloat] ?? [:]
-            logger.debug("[\(index)] \(owner) - \(name) | bounds: \(String(describing: bounds))")
-        }
-
         let regularWindows = filteredWindows.filter {
             ($0[kCGWindowOwnerName as String] as? String) != "Dock"
         }
 
         DispatchQueue.main.async {
-            self.windows = regularWindows
+            let areEqual = NSArray(array: self.windows).isEqual(to: regularWindows)
+            if !areEqual {
+                // Debug output
+                self.logger.debug("=== Windows (\(filteredWindows.count)) ===")
+                for (index, window) in filteredWindows.enumerated() {
+                    let name = window[kCGWindowName as String] as? String ?? "Unknown"
+                    let owner = window[kCGWindowOwnerName as String] as? String ?? "Unknown"
+                    let bounds = window[kCGWindowBounds as String] as? [String: CGFloat] ?? [:]
+                    self.logger.debug("[\(index)] \(owner) - \(name) | bounds: \(String(describing: bounds))")
+                }
+
+                self.windows = regularWindows
+                if let mouseLocation = CGEvent(source: nil)?.location {
+                    self.updateOverlay(at: mouseLocation)
+                }
+            }
         }
     }
 
@@ -158,7 +171,14 @@ final class OpenMissionControlCore: ObservableObject {
     private(set) var overlayRect: CGRect?
     private(set) var hoveredWindow: [String: Any]?
 
+    @Published private(set) var isOverlayShown: Bool = false
+    @Published private(set) var isOverlayHovered: Bool = false
+
     func updateOverlay(at mouseLocation: CGPoint) {
+        guard isOverlayShown else {
+            return
+        }
+
         DispatchQueue.main.async { [self] in
             if let rect = overlayRect {
                 let isHovering = rect.contains(mouseLocation)
@@ -271,6 +291,15 @@ final class OpenMissionControlCore: ObservableObject {
     }
 
     func showOverlay() {
+        // TODO: Optimize by only fetching windows when necessary
+        if windowFetchTimer == nil {
+            fetchWindows()
+
+            windowFetchTimer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in
+                self?.fetchWindows()
+            }
+        }
+
         if overlayWindow == nil {
             let window = NSWindow(
                 contentRect: .zero,
@@ -280,6 +309,7 @@ final class OpenMissionControlCore: ObservableObject {
             )
             window.level = .screenSaver
             window.backgroundColor = .clear
+            window.isReleasedWhenClosed = false
             window.contentView = NSHostingView(rootView: OverlayView())
             overlayWindow = window
         }
@@ -294,7 +324,16 @@ final class OpenMissionControlCore: ObservableObject {
     }
 
     func hideOverlay() {
+        windowFetchTimer?.invalidate()
+        windowFetchTimer = nil
         overlayWindow?.orderOut(nil)
         MouseEventMonitor.shared.stop()
+    }
+
+    func recreateOverlay() {
+        overlayWindow?.close()
+        overlayWindow = nil
+
+        showOverlay()
     }
 }

@@ -7,6 +7,7 @@
 
 import ApplicationServices
 import Combine
+import OSLog
 import SwiftUI
 
 // MARK: - Accessibility Row
@@ -151,6 +152,7 @@ struct SettingsView: View {
     @AppStorage("showZoomButton") private var showZoomButton: Bool = true
 
     @State private var launchAtLogin: Bool = LaunchAtLoginManager.isEnabled
+    private let logger = Logger(subsystem: "dev.travisxu.OpenMissionControl", category: "SettingsView")
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
@@ -183,7 +185,7 @@ struct SettingsView: View {
                             }
                         } catch {
                             launchAtLogin = !enabled
-                            print("Failed to update login item: \(error)")
+                            logger.error("Failed to update login item: \(error)")
                         }
                     }
                 }

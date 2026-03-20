@@ -115,6 +115,7 @@ class MouseEventMonitor {
 
     // MARK: - Private: Move Monitoring
 
+    // TODO: Performance optimizations (use event-based instead of pulling)
     private func startMoveMonitoring() {
         stopMoveFlag = false
         let thread = Thread { [weak self] in

@@ -31,7 +31,7 @@
 - [x] App Icon
 - [ ] Update Checker
 - [ ] Animations for overlay
-- [ ] Support for multiple monitors
+- [x] Support for multiple monitors
 - [ ] More granular settings
 - [ ] Themes
 - [ ] Performance optimizations
