@@ -5,7 +5,7 @@
 
 **Open Mission Control** is an open-source alternative to [Mission Control Plus](https://www.fadel.io/missioncontrolplus). It aims to enhance the macOS Mission Control experience by adding window management controls directly to the Mission Control view.
 
-![Demo](demo.png)
+![Demo](demo.gif)
 
 ## Installation & Usage
 
