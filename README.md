@@ -32,8 +32,7 @@
 - [ ] Update Checker
 - [ ] Animations for overlay
 - [x] Support for multiple monitors
-- [ ] More granular settings
-- [ ] Themes
+- [x] Themes
 - [ ] Performance optimizations
 
 ## Credits

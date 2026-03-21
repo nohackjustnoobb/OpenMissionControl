@@ -39,6 +39,7 @@ class SettingsViewManager: NSObject, ObservableObject {
 
         settingsWindowController?.showWindow(nil)
         settingsWindowController?.window?.center()
+        settingsWindowController?.window?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
 }

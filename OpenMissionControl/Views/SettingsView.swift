@@ -150,6 +150,7 @@ struct SettingsView: View {
     @AppStorage("showCloseButton") private var showCloseButton: Bool = true
     @AppStorage("showMinimizeButton") private var showMinimizeButton: Bool = true
     @AppStorage("showZoomButton") private var showZoomButton: Bool = true
+    @AppStorage("overlayTheme") private var currentTheme: OverlayTheme = .default
 
     @State private var launchAtLogin: Bool = LaunchAtLoginManager.isEnabled
     private let logger = Logger(subsystem: "dev.travisxu.OpenMissionControl", category: "SettingsView")
@@ -197,6 +198,36 @@ struct SettingsView: View {
                 sectionHeader("Overlay")
 
                 SettingsCard {
+                    HStack(spacing: 12) {
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                .fill(LinearGradient(colors: [Color.purple.opacity(0.85), Color.purple], startPoint: .top, endPoint: .bottom))
+                                .frame(width: 28, height: 28)
+                            Image(systemName: "paintpalette.fill")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundColor(.white)
+                        }
+
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text("Theme")
+                                .font(.system(size: 13, weight: .medium))
+                        }
+
+                        Spacer()
+
+                        Picker("", selection: $currentTheme) {
+                            ForEach(OverlayTheme.allCases, id: \.self) { theme in
+                                Text(theme.rawValue.capitalized).tag(theme)
+                            }
+                        }
+                        .labelsHidden()
+                        .frame(width: 100)
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
+
+                    SettingsDivider()
+
                     SettingToggleRow(
                         icon: "xmark",
                         iconColor: .red,
@@ -232,7 +263,7 @@ struct SettingsView: View {
 
                     HStack(spacing: 0) {
                         Spacer()
-                        trafficLightPreview
+                        OverlayView(isPreview: true)
                         Spacer()
                     }
                     .padding(.vertical, 14)
@@ -289,42 +320,5 @@ struct SettingsView: View {
             .font(.system(size: 11, weight: .semibold))
             .foregroundStyle(.secondary)
             .padding(.leading, 4)
-    }
-
-    private var trafficLightPreview: some View {
-        HStack(spacing: 8) {
-            if showCloseButton {
-                trafficLight(color: .red, icon: "xmark")
-            }
-            if showMinimizeButton {
-                trafficLight(color: .yellow, icon: "minus")
-            }
-            if showZoomButton {
-                trafficLight(color: .green, icon: "arrow.up.backward.and.arrow.down.forward")
-            }
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
-        .background(
-            Capsule()
-                .fill(Color(NSColor.windowBackgroundColor).opacity(0.95))
-        )
-        .overlay(
-            Capsule()
-                .stroke(Color.primary.opacity(0.15), lineWidth: 0.5)
-        )
-        .shadow(color: .black.opacity(0.12), radius: 6, x: 0, y: 3)
-    }
-
-    private func trafficLight(color: Color, icon: String) -> some View {
-        ZStack {
-            Circle()
-                .fill(LinearGradient(colors: [color.opacity(0.85), color], startPoint: .top, endPoint: .bottom))
-                .frame(width: 24, height: 24)
-                .shadow(color: color.opacity(0.4), radius: 3, x: 0, y: 1)
-            Image(systemName: icon)
-                .font(.system(size: 9, weight: .bold))
-                .foregroundColor(.black.opacity(0.45))
-        }
     }
 }
