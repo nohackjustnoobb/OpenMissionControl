@@ -42,11 +42,6 @@ struct AccessibilityRow: View {
                     let options: NSDictionary = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true]
                     let accessEnabled = AXIsProcessTrustedWithOptions(options)
                     isTrusted = accessEnabled
-                    if !accessEnabled {
-                        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
-                            NSWorkspace.shared.open(url)
-                        }
-                    }
                 }
                 .controlSize(.small)
             } else {
