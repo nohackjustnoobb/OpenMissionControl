@@ -230,11 +230,20 @@ final class OpenMissionControlCore: ObservableObject {
         let localX = location.x - rect.minX
         var currentX: CGFloat = 8
 
+        let showQuit = UserDefaults.standard.object(forKey: "showQuitButton") as? Bool ?? false
         let showClose = UserDefaults.standard.object(forKey: "showCloseButton") as? Bool ?? true
         let showMinimize = UserDefaults.standard.object(forKey: "showMinimizeButton") as? Bool ?? true
         let showZoom = UserDefaults.standard.object(forKey: "showZoomButton") as? Bool ?? true
 
         let windowName = window[kCGWindowName as String] as? String ?? ""
+
+        if showQuit {
+            if localX >= currentX, localX <= currentX + 24 {
+                logger.info("Quit button clicked on window: \(windowName)")
+                quitApplication(window: window)
+            }
+            currentX += 32
+        }
 
         if showClose {
             if localX >= currentX, localX <= currentX + 24 {
@@ -255,7 +264,10 @@ final class OpenMissionControlCore: ObservableObject {
         if showZoom {
             if localX >= currentX, localX <= currentX + 24 {
                 logger.info("Zoom button clicked on window: \(windowName)")
+
                 _ = CoreDockSendNotification("com.apple.expose.awake" as CFString, 0)
+                hideOverlay()
+
                 performWindowAction(window: window, action: kAXZoomButtonAttribute)
             }
             currentX += 32
@@ -279,15 +291,33 @@ final class OpenMissionControlCore: ObservableObject {
                 do {
                     if let button = try? axWindow.attribute(action, AXUIElement.self) {
                         try button.performAction(kAXPressAction)
+                        logger.info("Performed \(action) on window with PID \(pid) and WindowID \(windowID)")
+                    } else {
+                        logger.error("Failed to get \(action) for window with PID \(pid) and WindowID \(windowID)")
                     }
                 } catch {
                     logger.error("Failed to perform action \(action) on window: \(error.localizedDescription)")
                 }
+
                 return
             }
         }
 
         logger.warning("No matching AXUIElement found for window with PID \(pid) and WindowID \(windowID)")
+    }
+
+    private func quitApplication(window: [String: Any]) {
+        guard let pid = window[kCGWindowOwnerPID as String] as? pid_t else {
+            logger.error("Failed to get PID for window: \(window)")
+            return
+        }
+
+        if let app = NSRunningApplication(processIdentifier: pid) {
+            app.terminate()
+            logger.info("Terminated application with PID \(pid)")
+        } else {
+            logger.error("Failed to get NSRunningApplication for PID \(pid)")
+        }
     }
 
     func showOverlay() {

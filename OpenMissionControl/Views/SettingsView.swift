@@ -142,6 +142,7 @@ struct SettingsDivider: View {
 // MARK: - Main Settings View
 
 struct SettingsView: View {
+    @AppStorage("showQuitButton") private var showQuitButton: Bool = false
     @AppStorage("showCloseButton") private var showCloseButton: Bool = true
     @AppStorage("showMinimizeButton") private var showMinimizeButton: Bool = true
     @AppStorage("showZoomButton") private var showZoomButton: Bool = true
@@ -196,7 +197,7 @@ struct SettingsView: View {
                     HStack(spacing: 12) {
                         ZStack {
                             RoundedRectangle(cornerRadius: 7, style: .continuous)
-                                .fill(LinearGradient(colors: [Color.purple.opacity(0.85), Color.purple], startPoint: .top, endPoint: .bottom))
+                                .fill(LinearGradient(colors: [Color.red, Color.orange, Color.yellow, Color.green, Color.blue, Color.purple], startPoint: .top, endPoint: .bottom))
                                 .frame(width: 28, height: 28)
                             Image(systemName: "paintpalette.fill")
                                 .font(.system(size: 13, weight: .semibold))
@@ -212,7 +213,7 @@ struct SettingsView: View {
 
                         Picker("", selection: $currentTheme) {
                             ForEach(OverlayTheme.allCases, id: \.self) { theme in
-                                Text(theme.rawValue.capitalized).tag(theme)
+                                Text(theme.displayName).tag(theme)
                             }
                         }
                         .labelsHidden()
@@ -220,6 +221,15 @@ struct SettingsView: View {
                     }
                     .padding(.horizontal, 14)
                     .padding(.vertical, 8)
+
+                    SettingsDivider()
+
+                    SettingToggleRow(
+                        icon: "power",
+                        iconColor: .purple,
+                        title: "Quit Button",
+                        isOn: $showQuitButton
+                    )
 
                     SettingsDivider()
 

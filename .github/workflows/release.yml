@@ -23,7 +23,7 @@ jobs:
       - name: Setup Node.js (for create-dmg)
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "24"
 
       - name: Build and Create DMG
         run: |
@@ -33,8 +33,8 @@ jobs:
       - name: Upload .app Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: OpenMissionControl.app
-          path: build/Build/Products/Release/OpenMissionControl.app
+          name: "Open Mission Control.app"
+          path: "build/Build/Products/Release/Open Mission Control.app"
 
       - name: Upload Release
         uses: softprops/action-gh-release@v2

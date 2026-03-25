@@ -1,7 +1,7 @@
 # Open Mission Control
 
 > [!WARNING]
-> This project is in a **very early stage of development**. Many features are missing, and you may encounter bugs or performance issues. Use with caution!
+> This project is in a **early stage of development**. Some features are missing, and you may encounter bugs or performance issues. Use with caution!
 
 **Open Mission Control** is an open-source alternative to [Mission Control Plus](https://www.fadel.io/missioncontrolplus). It aims to enhance the macOS Mission Control experience by adding window management controls directly to the Mission Control view.
 

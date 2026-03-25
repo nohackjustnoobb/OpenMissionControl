@@ -10,6 +10,18 @@ import SwiftUI
 enum OverlayTheme: String, CaseIterable {
     case `default`
     case minimal
+    case coloredMinimal
+
+    var displayName: String {
+        switch self {
+        case .default:
+            return "Default"
+        case .minimal:
+            return "Minimal"
+        case .coloredMinimal:
+            return "Colored Minimal"
+        }
+    }
 }
 
 struct OverlayView: View {
@@ -23,6 +35,8 @@ struct OverlayView: View {
                 DefaultOverlayView()
             case .minimal:
                 MinimalOverlayView()
+            case .coloredMinimal:
+                ColoredMinimalOverlayView()
             }
         }
         .environment(\.isPreview, isPreview)

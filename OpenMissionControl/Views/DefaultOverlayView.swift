@@ -11,18 +11,25 @@ struct DefaultOverlayView: View {
     @Environment(\.isPreview) private var isPreview
     @ObservedObject private var openMissionControlCore = OpenMissionControlCore.shared
 
+    @AppStorage("showQuitButton") private var showQuitButton: Bool = false
     @AppStorage("showCloseButton") private var showCloseButton: Bool = true
     @AppStorage("showMinimizeButton") private var showMinimizeButton: Bool = true
     @AppStorage("showZoomButton") private var showZoomButton: Bool = true
 
     var body: some View {
         HStack(spacing: 8) {
+            if showQuitButton {
+                trafficLight(color: .purple, icon: "power", iconSize: 10)
+            }
+
             if showCloseButton {
                 trafficLight(color: .red, icon: "xmark", iconSize: 10)
             }
+
             if showMinimizeButton {
                 trafficLight(color: .yellow, icon: "minus", iconSize: 12)
             }
+
             if showZoomButton {
                 trafficLight(color: .green, icon: "arrow.up.backward.and.arrow.down.forward", iconSize: 10)
             }

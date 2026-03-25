@@ -1,13 +1,13 @@
 //
-//  MinimalOverlayView.swift
+//  ColoredMinimalOverlayView.swift
 //  OpenMissionControl
 //
-//  Created by Travis XU on 21/3/2026.
+//  Created by Travis XU on 25/3/2026.
 //
 
 import SwiftUI
 
-struct MinimalOverlayView: View {
+struct ColoredMinimalOverlayView: View {
     @ObservedObject private var openMissionControlCore = OpenMissionControlCore.shared
 
     @AppStorage("showQuitButton") private var showQuitButton: Bool = false
@@ -18,19 +18,19 @@ struct MinimalOverlayView: View {
     var body: some View {
         HStack(spacing: 8) {
             if showQuitButton {
-                overlayIcon(icon: "power", iconSize: 10)
+                overlayIcon(color: .purple, icon: "power", iconSize: 10)
             }
 
             if showCloseButton {
-                overlayIcon(icon: "xmark", iconSize: 12)
+                overlayIcon(color: .red, icon: "xmark", iconSize: 12)
             }
 
             if showMinimizeButton {
-                overlayIcon(icon: "minus", iconSize: 15)
+                overlayIcon(color: .yellow, icon: "minus", iconSize: 15)
             }
 
             if showZoomButton {
-                overlayIcon(icon: "arrow.up.backward.and.arrow.down.forward", iconSize: 12)
+                overlayIcon(color: .green, icon: "arrow.up.backward.and.arrow.down.forward", iconSize: 12)
             }
         }
         .padding(.horizontal, 10)
@@ -45,10 +45,10 @@ struct MinimalOverlayView: View {
         )
     }
 
-    private func overlayIcon(icon: String, iconSize: CGFloat) -> some View {
+    private func overlayIcon(color: Color, icon: String, iconSize: CGFloat) -> some View {
         Image(systemName: icon)
             .font(.system(size: iconSize, weight: .bold))
-            .foregroundColor(.primary)
+            .foregroundColor(color)
             .frame(width: 24, height: 24)
     }
 }
