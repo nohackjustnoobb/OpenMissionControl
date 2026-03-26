@@ -22,10 +22,12 @@ class SettingsViewManager: NSObject, ObservableObject {
             let fittingSize = hostingController.view.fittingSize
             let window = NSWindow(
                 contentRect: NSRect(origin: .zero, size: fittingSize),
-                styleMask: [.titled, .closable, .miniaturizable, .fullSizeContentView],
+                styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
                 backing: .buffered,
                 defer: false
             )
+
+            window.minSize = NSSize(width: fittingSize.width, height: 600)
 
             window.contentViewController = hostingController
             window.isReleasedWhenClosed = true

@@ -147,175 +147,261 @@ struct SettingsView: View {
     @AppStorage("showMinimizeButton") private var showMinimizeButton: Bool = true
     @AppStorage("showZoomButton") private var showZoomButton: Bool = true
     @AppStorage("overlayTheme") private var currentTheme: OverlayTheme = .default
+    @AppStorage("updateDuration") private var updateDuration: Double = 0.25
+    @AppStorage("mouseUpdateDuration") private var mouseUpdateDuration: Double = 0.1
+    @AppStorage("shortcutQuit") private var shortcutQuit: Bool = false
+    @AppStorage("shortcutClose") private var shortcutClose: Bool = false
+    @AppStorage("shortcutMinimize") private var shortcutMinimize: Bool = false
+    @AppStorage("shortcutMaximize") private var shortcutMaximize: Bool = false
 
     @State private var launchAtLogin: Bool = LaunchAtLoginManager.isEnabled
     private let logger = Logger(subsystem: "dev.travisxu.OpenMissionControl", category: "SettingsView")
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            // MARK: Permissions
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                // MARK: Permissions
 
-            VStack(alignment: .leading, spacing: 6) {
-                sectionHeader("Permissions")
-
-                SettingsCard {
-                    AccessibilityRow()
-                }
-            }
-
-            // MARK: General
-
-            VStack(alignment: .leading, spacing: 6) {
-                sectionHeader("General")
-
-                SettingsCard {
-                    SettingToggleRow(
-                        title: "Launch at Login",
-                        isOn: $launchAtLogin
-                    )
-                    .onChange(of: launchAtLogin) { enabled in
-                        do {
-                            if enabled {
-                                try LaunchAtLoginManager.enable()
-                            } else {
-                                try LaunchAtLoginManager.disable()
-                            }
-                        } catch {
-                            launchAtLogin = !enabled
-                            logger.error("Failed to update login item: \(error)")
-                        }
-                    }
-                }
-            }
-
-            // MARK: Overlay Buttons
-
-            VStack(alignment: .leading, spacing: 6) {
-                sectionHeader("Overlay")
-
-                SettingsCard {
-                    HStack(spacing: 12) {
-                        ZStack {
-                            RoundedRectangle(cornerRadius: 7, style: .continuous)
-                                .fill(LinearGradient(colors: [Color.red, Color.orange, Color.yellow, Color.green, Color.blue, Color.purple], startPoint: .top, endPoint: .bottom))
-                                .frame(width: 28, height: 28)
-                            Image(systemName: "paintpalette.fill")
-                                .font(.system(size: 13, weight: .semibold))
-                                .foregroundColor(.white)
-                        }
-
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text("Theme")
-                                .font(.system(size: 13, weight: .medium))
-                        }
-
-                        Spacer()
-
-                        Picker("", selection: $currentTheme) {
-                            ForEach(OverlayTheme.allCases, id: \.self) { theme in
-                                Text(theme.displayName).tag(theme)
-                            }
-                        }
-                        .labelsHidden()
-                        .frame(width: 100)
-                    }
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 8)
-
-                    SettingsDivider()
-
-                    SettingToggleRow(
-                        icon: "power",
-                        iconColor: .purple,
-                        title: "Quit Button",
-                        isOn: $showQuitButton
-                    )
-
-                    SettingsDivider()
-
-                    SettingToggleRow(
-                        icon: "xmark",
-                        iconColor: .red,
-                        title: "Close Button",
-                        isOn: $showCloseButton
-                    )
-
-                    SettingsDivider()
-
-                    SettingToggleRow(
-                        icon: "minus",
-                        iconColor: .yellow,
-                        title: "Minimize Button",
-                        isOn: $showMinimizeButton
-                    )
-
-                    SettingsDivider()
-
-                    SettingToggleRow(
-                        icon: "arrow.up.backward.and.arrow.down.forward",
-                        iconColor: .green,
-                        title: "Maximize Button",
-                        isOn: $showZoomButton
-                    )
-                }
-            }
-
-            // MARK: Preview
-
-            if showCloseButton || showMinimizeButton || showZoomButton {
                 VStack(alignment: .leading, spacing: 6) {
-                    sectionHeader("Preview")
+                    sectionHeader("Permissions")
 
-                    HStack(spacing: 0) {
-                        Spacer()
-                        OverlayView(isPreview: true)
-                        Spacer()
+                    SettingsCard {
+                        AccessibilityRow()
                     }
-                    .padding(.vertical, 14)
-                    .background(
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .fill(Color(NSColor.controlBackgroundColor))
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .stroke(Color.primary.opacity(0.08), lineWidth: 1)
-                    )
                 }
-            }
 
-            // MARK: About
+                // MARK: General
 
-            VStack(alignment: .leading, spacing: 6) {
-                sectionHeader("About")
+                VStack(alignment: .leading, spacing: 6) {
+                    sectionHeader("General")
 
-                SettingsCard {
-                    HStack {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(Bundle.main.infoDictionary?["CFBundleDisplayName"] as? String ?? "Open Mission Control")
-                                .font(.system(size: 13, weight: .medium))
-                            if let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String, let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String {
-                                Text("Version \(version) (\(build))")
+                    SettingsCard {
+                        SettingToggleRow(
+                            title: "Launch at Login",
+                            isOn: $launchAtLogin
+                        )
+                        .onChange(of: launchAtLogin) { enabled in
+                            do {
+                                if enabled {
+                                    try LaunchAtLoginManager.enable()
+                                } else {
+                                    try LaunchAtLoginManager.disable()
+                                }
+                            } catch {
+                                launchAtLogin = !enabled
+                                logger.error("Failed to update login item: \(error)")
+                            }
+                        }
+
+                        SettingsDivider()
+
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack {
+                                Text("Window Update Duration")
+                                    .font(.system(size: 13, weight: .medium))
+                                Spacer()
+                                Text(String(format: "%.2f s", updateDuration))
                                     .font(.system(size: 11))
                                     .foregroundStyle(.secondary)
                             }
+                            Slider(value: $updateDuration, in: 0.05 ... 2.0, step: 0.05)
+                                .controlSize(.small)
+                            Text("The interval for polling window state.")
+                                .font(.system(size: 11))
+                                .foregroundStyle(.secondary)
                         }
-                        Spacer()
-                        Link(destination: URL(string: "https://github.com/nohackjustnoobb/OpenMissionControl")!) {
-                            HStack(spacing: 4) {
-                                Text("GitHub")
-                                Image(systemName: "link")
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 8)
+
+                        SettingsDivider()
+
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack {
+                                Text("Mouse Update Duration")
+                                    .font(.system(size: 13, weight: .medium))
+                                Spacer()
+                                Text(String(format: "%.2f s", mouseUpdateDuration))
+                                    .font(.system(size: 11))
+                                    .foregroundStyle(.secondary)
                             }
+                            Slider(value: $mouseUpdateDuration, in: 0.05 ... 1.0, step: 0.05)
+                                .controlSize(.small)
+                            Text("The interval for polling mouse state.")
+                                .font(.system(size: 11))
+                                .foregroundStyle(.secondary)
                         }
-                        .font(.system(size: 12))
-                        .foregroundColor(.blue)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 8)
                     }
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 12)
+                }
+
+                // MARK: Overlay Buttons
+
+                VStack(alignment: .leading, spacing: 6) {
+                    sectionHeader("Overlay")
+
+                    SettingsCard {
+                        HStack(spacing: 12) {
+                            ZStack {
+                                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                    .fill(LinearGradient(colors: [Color.red, Color.orange, Color.yellow, Color.green, Color.blue, Color.purple], startPoint: .top, endPoint: .bottom))
+                                    .frame(width: 28, height: 28)
+                                Image(systemName: "paintpalette.fill")
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .foregroundColor(.white)
+                            }
+
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text("Theme")
+                                    .font(.system(size: 13, weight: .medium))
+                            }
+
+                            Spacer()
+
+                            Picker("", selection: $currentTheme) {
+                                ForEach(OverlayTheme.allCases, id: \.self) { theme in
+                                    Text(theme.displayName).tag(theme)
+                                }
+                            }
+                            .labelsHidden()
+                            .frame(width: 100)
+                        }
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 8)
+
+                        SettingsDivider()
+
+                        SettingToggleRow(
+                            icon: "power",
+                            iconColor: .purple,
+                            title: "Quit Button",
+                            isOn: $showQuitButton
+                        )
+
+                        SettingsDivider()
+
+                        SettingToggleRow(
+                            icon: "xmark",
+                            iconColor: .red,
+                            title: "Close Button",
+                            isOn: $showCloseButton
+                        )
+
+                        SettingsDivider()
+
+                        SettingToggleRow(
+                            icon: "minus",
+                            iconColor: .yellow,
+                            title: "Minimize Button",
+                            isOn: $showMinimizeButton
+                        )
+
+                        SettingsDivider()
+
+                        SettingToggleRow(
+                            icon: "arrow.up.backward.and.arrow.down.forward",
+                            iconColor: .green,
+                            title: "Maximize Button",
+                            isOn: $showZoomButton
+                        )
+                    }
+                }
+
+                // MARK: Preview
+
+                if showCloseButton || showMinimizeButton || showZoomButton {
+                    VStack(alignment: .leading, spacing: 6) {
+                        sectionHeader("Preview")
+
+                        HStack(spacing: 0) {
+                            Spacer()
+                            OverlayView(isPreview: true)
+                            Spacer()
+                        }
+                        .padding(.vertical, 14)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .fill(Color(NSColor.controlBackgroundColor))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+                        )
+                    }
+                }
+
+                // MARK: Shortcuts
+
+                VStack(alignment: .leading, spacing: 6) {
+                    sectionHeader("Shortcuts")
+
+                    SettingsCard {
+                        SettingToggleRow(
+                            iconColor: .purple,
+                            title: "Quit (⌘Q)",
+                            isOn: $shortcutQuit
+                        )
+
+                        SettingsDivider()
+
+                        SettingToggleRow(
+                            iconColor: .red,
+                            title: "Close (⌘W)",
+                            isOn: $shortcutClose
+                        )
+
+                        SettingsDivider()
+
+                        SettingToggleRow(
+                            iconColor: .yellow,
+                            title: "Minimize (⌘M)",
+                            isOn: $shortcutMinimize
+                        )
+
+                        SettingsDivider()
+
+                        SettingToggleRow(
+                            iconColor: .green,
+                            title: "Maximize (⌘F)",
+                            isOn: $shortcutMaximize
+                        )
+                    }
+                }
+
+                // MARK: About
+
+                VStack(alignment: .leading, spacing: 6) {
+                    sectionHeader("About")
+
+                    SettingsCard {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(Bundle.main.infoDictionary?["CFBundleDisplayName"] as? String ?? "Open Mission Control")
+                                    .font(.system(size: 13, weight: .medium))
+                                if let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String, let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String {
+                                    Text("Version \(version) (\(build))")
+                                        .font(.system(size: 11))
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                            Spacer()
+                            Link(destination: URL(string: "https://github.com/nohackjustnoobb/OpenMissionControl")!) {
+                                HStack(spacing: 4) {
+                                    Text("GitHub")
+                                    Image(systemName: "link")
+                                }
+                            }
+                            .font(.system(size: 12))
+                            .foregroundColor(.blue)
+                        }
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 12)
+                    }
                 }
             }
+            .padding(16)
+            .frame(width: 400)
         }
-        .padding(16)
-        .frame(width: 400)
     }
 
     // MARK: Helpers

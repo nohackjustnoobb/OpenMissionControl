@@ -24,6 +24,11 @@ final class OpenMissionControlCore: ObservableObject {
 
     private var windows: [[String: Any]] = []
     private var windowFetchTimer: Timer?
+    @AppStorage("updateDuration") private var updateDuration: Double = 0.25
+    @AppStorage("shortcutQuit") private var shortcutQuit: Bool = false
+    @AppStorage("shortcutClose") private var shortcutClose: Bool = false
+    @AppStorage("shortcutMinimize") private var shortcutMinimize: Bool = false
+    @AppStorage("shortcutMaximize") private var shortcutMaximize: Bool = false
 
     // MARK: - Lifecycle
 
@@ -53,6 +58,11 @@ final class OpenMissionControlCore: ObservableObject {
 
             self.logger.debug("Mouse moved to: \(location.x), \(location.y)")
             self.handleMouseMove(to: location)
+        }
+        MouseEventMonitor.shared.setKeyHandler { [weak self] flags, keyCode in
+            guard let self = self else { return true }
+
+            return self.handleKeyPress(flags: flags, keyCode: keyCode)
         }
 
         // Listen for active space changes to refresh window list and overlay
@@ -128,6 +138,50 @@ final class OpenMissionControlCore: ObservableObject {
         updateOverlay(at: location)
     }
 
+    // MARK: - Key Event Handling
+
+    private func handleKeyPress(flags: CGEventFlags, keyCode: CGKeyCode) -> Bool {
+        guard isOverlayShown, let window = hoveredWindow else { return true }
+
+        // Check for Command key
+        guard flags.contains(.maskCommand) else { return true }
+
+        let windowName = window[kCGWindowName as String] as? String ?? ""
+
+        switch keyCode {
+        case 12: // Q
+            if shortcutQuit {
+                logger.info("Shortcut Quit triggered on window: \(windowName)")
+                quitApplication(window: window)
+                return false
+            }
+        case 13: // W
+            if shortcutClose {
+                logger.info("Shortcut Close triggered on window: \(windowName)")
+                performWindowAction(window: window, action: kAXCloseButtonAttribute)
+                return false
+            }
+        case 46: // M
+            if shortcutMinimize {
+                logger.info("Shortcut Minimize triggered on window: \(windowName)")
+                performWindowAction(window: window, action: kAXMinimizeButtonAttribute)
+                return false
+            }
+        case 3: // F
+            if shortcutMaximize {
+                logger.info("Shortcut Maximize triggered on window: \(windowName)")
+                _ = CoreDockSendNotification("com.apple.expose.awake" as CFString, 0)
+                hideOverlay()
+                performWindowAction(window: window, action: kAXZoomButtonAttribute)
+                return false
+            }
+        default:
+            break
+        }
+
+        return true
+    }
+
     // MARK: - Window Fetching
 
     func fetchWindows() {
@@ -158,9 +212,6 @@ final class OpenMissionControlCore: ObservableObject {
                 }
 
                 self.windows = regularWindows
-                if let mouseLocation = CGEvent(source: nil)?.location {
-                    self.updateOverlay(at: mouseLocation)
-                }
             }
         }
     }
@@ -325,7 +376,7 @@ final class OpenMissionControlCore: ObservableObject {
         if windowFetchTimer == nil {
             fetchWindows()
 
-            windowFetchTimer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in
+            windowFetchTimer = Timer.scheduledTimer(withTimeInterval: updateDuration, repeats: true) { [weak self] _ in
                 self?.fetchWindows()
             }
         }

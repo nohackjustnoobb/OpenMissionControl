@@ -9,6 +9,7 @@ import AppKit
 import CoreGraphics
 import Foundation
 import os
+import SwiftUI
 
 /// Monitors global mouse events and notifies registered handlers on click and move events.
 class MouseEventMonitor {
@@ -18,8 +19,11 @@ class MouseEventMonitor {
 
     typealias ClickHandler = (_ location: CGPoint) -> Bool
     typealias MoveHandler = (_ location: CGPoint) -> Void
+    typealias KeyHandler = (_ flags: CGEventFlags, _ keyCode: CGKeyCode) -> Bool
 
     // MARK: - Properties
+
+    @AppStorage("mouseUpdateDuration") private var mouseUpdateDuration: Double = 0.1
 
     private let logger = Logger(
         subsystem: "dev.travisxu.OpenMissionControl",
@@ -28,6 +32,7 @@ class MouseEventMonitor {
 
     private var clickHandler: ClickHandler?
     private var moveHandler: MoveHandler?
+    private var keyHandler: KeyHandler?
     private(set) var isMonitoring: Bool = false
 
     // MARK: - Click Monitoring (CGEvent tap)
@@ -48,6 +53,10 @@ class MouseEventMonitor {
 
     func setMoveHandler(_ handler: @escaping MoveHandler) {
         moveHandler = handler
+    }
+
+    func setKeyHandler(_ handler: @escaping KeyHandler) {
+        keyHandler = handler
     }
 
     func start() {
@@ -74,7 +83,7 @@ class MouseEventMonitor {
     // MARK: - Private: Click Monitoring
 
     private func startClickMonitoring() {
-        let eventMask = (1 << CGEventType.leftMouseDown.rawValue)
+        let eventMask = (1 << CGEventType.leftMouseDown.rawValue) | (1 << CGEventType.keyDown.rawValue)
 
         guard let tap = CGEvent.tapCreate(
             tap: .cgSessionEventTap,
@@ -126,7 +135,7 @@ class MouseEventMonitor {
                     lastLocation = location
                     self.handleMove(to: location)
                 }
-                Thread.sleep(forTimeInterval: 0.1) // ~10 Hz
+                Thread.sleep(forTimeInterval: self.mouseUpdateDuration)
             }
         }
         thread.name = "MouseMovePoller"
@@ -155,6 +164,11 @@ class MouseEventMonitor {
         moveHandler?(location)
     }
 
+    @discardableResult
+    fileprivate func handleKey(flags: CGEventFlags, keyCode: CGKeyCode) -> Bool {
+        return keyHandler?(flags, keyCode) ?? true
+    }
+
     // MARK: - Lifecycle
 
     deinit {
@@ -181,6 +195,13 @@ private func mouseEventMonitorClickCallback(
     if type == .leftMouseDown {
         let location = event.location
         let passDown = MouseEventMonitor.shared.handleClick(at: location)
+        if !passDown {
+            return nil
+        }
+    } else if type == .keyDown {
+        let flags = event.flags
+        let keyCode = CGKeyCode(event.getIntegerValueField(.keyboardEventKeycode))
+        let passDown = MouseEventMonitor.shared.handleKey(flags: flags, keyCode: keyCode)
         if !passDown {
             return nil
         }
