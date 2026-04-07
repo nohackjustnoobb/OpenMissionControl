@@ -20,7 +20,12 @@ struct AccessibilityRow: View {
         HStack(spacing: 12) {
             ZStack {
                 RoundedRectangle(cornerRadius: 7, style: .continuous)
-                    .fill(LinearGradient(colors: [Color.blue.opacity(0.85), Color.blue], startPoint: .top, endPoint: .bottom))
+                    .fill(
+                        LinearGradient(
+                            colors: [Color.blue.opacity(0.85), Color.blue], startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
                     .frame(width: 28, height: 28)
                 Image(systemName: "hand.raised.fill")
                     .font(.system(size: 13, weight: .semibold))
@@ -39,7 +44,9 @@ struct AccessibilityRow: View {
 
             if !isTrusted {
                 Button("Grant") {
-                    let options: NSDictionary = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true]
+                    let options: NSDictionary = [
+                        kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true,
+                    ]
                     let accessEnabled = AXIsProcessTrustedWithOptions(options)
                     isTrusted = accessEnabled
                 }
@@ -69,7 +76,10 @@ struct SettingToggleRow: View {
     let subtitle: String?
     @Binding var isOn: Bool
 
-    init(icon: String? = nil, iconColor: Color = .blue, title: String, subtitle: String? = nil, isOn: Binding<Bool>) {
+    init(
+        icon: String? = nil, iconColor: Color = .blue, title: String, subtitle: String? = nil,
+        isOn: Binding<Bool>
+    ) {
         self.icon = icon
         self.iconColor = iconColor
         self.title = title
@@ -82,7 +92,12 @@ struct SettingToggleRow: View {
             if let icon {
                 ZStack {
                     RoundedRectangle(cornerRadius: 7, style: .continuous)
-                        .fill(LinearGradient(colors: [iconColor.opacity(0.85), iconColor], startPoint: .top, endPoint: .bottom))
+                        .fill(
+                            LinearGradient(
+                                colors: [iconColor.opacity(0.85), iconColor], startPoint: .top,
+                                endPoint: .bottom
+                            )
+                        )
                         .frame(width: 28, height: 28)
                     Image(systemName: icon)
                         .font(.system(size: 13, weight: .semibold))
@@ -155,7 +170,9 @@ struct SettingsView: View {
     @AppStorage("shortcutMaximize") private var shortcutMaximize: Bool = false
 
     @State private var launchAtLogin: Bool = LaunchAtLoginManager.isEnabled
-    private let logger = Logger(subsystem: "dev.travisxu.OpenMissionControl", category: "SettingsView")
+    private let logger = Logger(
+        subsystem: "dev.travisxu.OpenMissionControl", category: "SettingsView"
+    )
 
     var body: some View {
         ScrollView {
@@ -244,7 +261,14 @@ struct SettingsView: View {
                         HStack(spacing: 12) {
                             ZStack {
                                 RoundedRectangle(cornerRadius: 7, style: .continuous)
-                                    .fill(LinearGradient(colors: [Color.red, Color.orange, Color.yellow, Color.green, Color.blue, Color.purple], startPoint: .top, endPoint: .bottom))
+                                    .fill(
+                                        LinearGradient(
+                                            colors: [
+                                                Color.red, Color.orange, Color.yellow, Color.green,
+                                                Color.blue, Color.purple,
+                                            ], startPoint: .top, endPoint: .bottom
+                                        )
+                                    )
                                     .frame(width: 28, height: 28)
                                 Image(systemName: "paintpalette.fill")
                                     .font(.system(size: 13, weight: .semibold))
@@ -376,16 +400,28 @@ struct SettingsView: View {
                     SettingsCard {
                         HStack {
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(Bundle.main.infoDictionary?["CFBundleDisplayName"] as? String ?? "Open Mission Control")
-                                    .font(.system(size: 13, weight: .medium))
-                                if let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String, let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String {
+                                Text(
+                                    Bundle.main.infoDictionary?["CFBundleDisplayName"] as? String
+                                        ?? "Open Mission Control"
+                                )
+                                .font(.system(size: 13, weight: .medium))
+                                if let version = Bundle.main.infoDictionary?[
+                                    "CFBundleShortVersionString"
+                                ] as? String,
+                                    let build = Bundle.main.infoDictionary?["CFBundleVersion"]
+                                    as? String
+                                {
                                     Text("Version \(version) (\(build))")
                                         .font(.system(size: 11))
                                         .foregroundStyle(.secondary)
                                 }
                             }
                             Spacer()
-                            Link(destination: URL(string: "https://github.com/nohackjustnoobb/OpenMissionControl")!) {
+                            Link(
+                                destination: URL(
+                                    string: "https://github.com/nohackjustnoobb/OpenMissionControl"
+                                )!
+                            ) {
                                 HStack(spacing: 4) {
                                     Text("GitHub")
                                     Image(systemName: "link")

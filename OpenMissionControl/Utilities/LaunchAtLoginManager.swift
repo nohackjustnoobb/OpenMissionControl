@@ -6,24 +6,37 @@
 //
 
 import Foundation
+import ServiceManagement
 
 enum LaunchAtLoginManager {
     // MARK: - Public API
 
     static var isEnabled: Bool {
-        FileManager.default.fileExists(atPath: plistURL.path)
+        if #available(macOS 13.0, *) {
+            return SMAppService.mainApp.status == .enabled
+        } else {
+            return FileManager.default.fileExists(atPath: plistURL.path)
+        }
     }
 
     static func enable() throws {
-        let plist = buildPlist()
-        try plist.write(to: plistURL, atomically: true, encoding: .utf8)
-        try launchctl("load", "-w", plistURL.path)
+        if #available(macOS 13.0, *) {
+            try SMAppService.mainApp.register()
+        } else {
+            let plist = buildPlist()
+            try plist.write(to: plistURL, atomically: true, encoding: .utf8)
+            try launchctl("load", "-w", plistURL.path)
+        }
     }
 
     static func disable() throws {
-        if isEnabled {
-            try launchctl("unload", "-w", plistURL.path)
-            try FileManager.default.removeItem(at: plistURL)
+        if #available(macOS 13.0, *) {
+            try SMAppService.mainApp.unregister()
+        } else {
+            if isEnabled {
+                try launchctl("unload", "-w", plistURL.path)
+                try FileManager.default.removeItem(at: plistURL)
+            }
         }
     }
 

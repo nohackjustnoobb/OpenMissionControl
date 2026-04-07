@@ -18,7 +18,9 @@ func CoreDockSendNotification(_ notification: CFString, _ unknown: Int32) -> CGE
 
 final class OpenMissionControlCore: ObservableObject {
     static let shared = OpenMissionControlCore()
-    private let logger = Logger(subsystem: "dev.travisxu.OpenMissionControl", category: "OpenMissionControlCore")
+    private let logger = Logger(
+        subsystem: "dev.travisxu.OpenMissionControl", category: "OpenMissionControlCore"
+    )
 
     // MARK: - Window State
 
@@ -33,10 +35,25 @@ final class OpenMissionControlCore: ObservableObject {
     // MARK: - Lifecycle
 
     @Published private(set) var isRunning: Bool = false
+    private var axTrustedTimer: Timer?
+    private var wasAXTrusted: Bool = AXIsProcessTrusted()
+
     func start() {
         guard !isRunning else { return }
 
         isRunning = true
+
+        wasAXTrusted = AXIsProcessTrusted()
+        axTrustedTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) {
+            [weak self] _ in
+            let isTrusted = AXIsProcessTrusted()
+            if let self = self {
+                if !self.wasAXTrusted, isTrusted {
+                    self.restartApp()
+                }
+                self.wasAXTrusted = isTrusted
+            }
+        }
 
         // Configure Mission Control monitor
         MissionControlMonitor.shared.setHandler { [weak self] state in
@@ -77,6 +94,8 @@ final class OpenMissionControlCore: ObservableObject {
     }
 
     func stop() {
+        axTrustedTimer?.invalidate()
+        axTrustedTimer = nil
         MissionControlMonitor.shared.stop()
         MouseEventMonitor.shared.stop()
         NSWorkspace.shared.notificationCenter.removeObserver(self)
@@ -208,7 +227,9 @@ final class OpenMissionControlCore: ObservableObject {
                     let name = window[kCGWindowName as String] as? String ?? "Unknown"
                     let owner = window[kCGWindowOwnerName as String] as? String ?? "Unknown"
                     let bounds = window[kCGWindowBounds as String] as? [String: CGFloat] ?? [:]
-                    self.logger.debug("[\(index)] \(owner) - \(name) | bounds: \(String(describing: bounds))")
+                    self.logger.debug(
+                        "[\(index)] \(owner) - \(name) | bounds: \(String(describing: bounds))"
+                    )
                 }
 
                 self.windows = regularWindows
@@ -254,7 +275,8 @@ final class OpenMissionControlCore: ObservableObject {
                 // Check if mouse is within this window's bounds
                 if windowFrame.contains(mouseLocation) {
                     // Convert CG top-left coordinates to NSWindow bottom-left coordinates
-                    let screenHeight = NSScreen.screens.first?.frame.height ?? NSScreen.main?.frame.height ?? 0
+                    let screenHeight =
+                        NSScreen.screens.first?.frame.height ?? NSScreen.main?.frame.height ?? 0
                     let convertedY = screenHeight - y - 40
 
                     let newFrame = NSRect(x: x + 8, y: convertedY - 8, width: 104, height: 40)
@@ -283,7 +305,8 @@ final class OpenMissionControlCore: ObservableObject {
 
         let showQuit = UserDefaults.standard.object(forKey: "showQuitButton") as? Bool ?? false
         let showClose = UserDefaults.standard.object(forKey: "showCloseButton") as? Bool ?? true
-        let showMinimize = UserDefaults.standard.object(forKey: "showMinimizeButton") as? Bool ?? true
+        let showMinimize =
+            UserDefaults.standard.object(forKey: "showMinimizeButton") as? Bool ?? true
         let showZoom = UserDefaults.standard.object(forKey: "showZoomButton") as? Bool ?? true
 
         let windowName = window[kCGWindowName as String] as? String ?? ""
@@ -342,19 +365,27 @@ final class OpenMissionControlCore: ObservableObject {
                 do {
                     if let button = try? axWindow.attribute(action, AXUIElement.self) {
                         try button.performAction(kAXPressAction)
-                        logger.info("Performed \(action) on window with PID \(pid) and WindowID \(windowID)")
+                        logger.info(
+                            "Performed \(action) on window with PID \(pid) and WindowID \(windowID)"
+                        )
                     } else {
-                        logger.error("Failed to get \(action) for window with PID \(pid) and WindowID \(windowID)")
+                        logger.error(
+                            "Failed to get \(action) for window with PID \(pid) and WindowID \(windowID)"
+                        )
                     }
                 } catch {
-                    logger.error("Failed to perform action \(action) on window: \(error.localizedDescription)")
+                    logger.error(
+                        "Failed to perform action \(action) on window: \(error.localizedDescription)"
+                    )
                 }
 
                 return
             }
         }
 
-        logger.warning("No matching AXUIElement found for window with PID \(pid) and WindowID \(windowID)")
+        logger.warning(
+            "No matching AXUIElement found for window with PID \(pid) and WindowID \(windowID)"
+        )
     }
 
     private func quitApplication(window: [String: Any]) {
@@ -416,5 +447,13 @@ final class OpenMissionControlCore: ObservableObject {
         overlayWindow = nil
 
         showOverlay()
+    }
+
+    private func restartApp() {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/open")
+        process.arguments = ["-n", Bundle.main.bundlePath]
+        try? process.run()
+        NSApplication.shared.terminate(nil)
     }
 }
