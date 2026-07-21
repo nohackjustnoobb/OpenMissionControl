@@ -41,6 +41,14 @@ class MouseEventMonitor {
     fileprivate var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
 
+    // MARK: - Key Monitoring (CGEvent tap)
+
+    // A dedicated tap at the HID level. A `.cgSessionEventTap` does NOT receive key events while
+    // Mission Control is active (the WindowServer grabs them first), even though it still receives
+    // mouse events. Tapping at `.cghidEventTap` sits below that grab, so keys come through.
+    fileprivate var keyEventTap: CFMachPort?
+    private var keyRunLoopSource: CFRunLoopSource?
+
     // MARK: - Move Monitoring (CGEvent polling)
 
     private var moveThread: Thread?
@@ -66,6 +74,7 @@ class MouseEventMonitor {
         isMonitoring = true
 
         startClickMonitoring()
+        startKeyMonitoring()
         startMoveMonitoring()
 
         logger.info("Mouse event monitoring started.")
@@ -75,6 +84,7 @@ class MouseEventMonitor {
         guard isMonitoring else { return }
 
         stopClickMonitoring()
+        stopKeyMonitoring()
         stopMoveMonitoring()
 
         isMonitoring = false
@@ -87,7 +97,6 @@ class MouseEventMonitor {
         let eventMask = (1 << CGEventType.leftMouseDown.rawValue)
             | (1 << CGEventType.rightMouseDown.rawValue)
             | (1 << CGEventType.otherMouseDown.rawValue)
-            | (1 << CGEventType.keyDown.rawValue)
 
         guard let tap = CGEvent.tapCreate(
             tap: .cgSessionEventTap,
@@ -110,6 +119,46 @@ class MouseEventMonitor {
 
         CGEvent.tapEnable(tap: tap, enable: true)
         logger.info("Click event tap started.")
+    }
+
+    private func startKeyMonitoring() {
+        let eventMask = (1 << CGEventType.keyDown.rawValue)
+
+        guard let tap = CGEvent.tapCreate(
+            tap: .cghidEventTap,
+            place: .headInsertEventTap,
+            options: .defaultTap,
+            eventsOfInterest: CGEventMask(eventMask),
+            callback: mouseEventMonitorKeyCallback,
+            userInfo: nil
+        ) else {
+            logger.error("Failed to create key event tap. Please grant Accessibility permissions.")
+            return
+        }
+
+        keyEventTap = tap
+        keyRunLoopSource = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0)
+
+        if let source = keyRunLoopSource {
+            CFRunLoopAddSource(CFRunLoopGetCurrent(), source, .commonModes)
+        }
+
+        CGEvent.tapEnable(tap: tap, enable: true)
+        logger.info("Key event tap started (HID level).")
+    }
+
+    private func stopKeyMonitoring() {
+        if let tap = keyEventTap {
+            CGEvent.tapEnable(tap: tap, enable: false)
+        }
+
+        if let source = keyRunLoopSource {
+            CFRunLoopRemoveSource(CFRunLoopGetCurrent(), source, .commonModes)
+        }
+
+        keyEventTap = nil
+        keyRunLoopSource = nil
+        logger.info("Key event tap stopped.")
     }
 
     private func stopClickMonitoring() {
@@ -216,7 +265,28 @@ private func mouseEventMonitorClickCallback(
                 return nil
             }
         }
-    } else if type == .keyDown {
+    }
+
+    return Unmanaged.passRetained(event)
+}
+
+// MARK: - C Callback for Key Events
+
+private func mouseEventMonitorKeyCallback(
+    proxy _: CGEventTapProxy,
+    type: CGEventType,
+    event: CGEvent,
+    refcon _: UnsafeMutableRawPointer?
+) -> Unmanaged<CGEvent>? {
+    // Re-enable tap if it was disabled by timeout or user input
+    if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
+        if let tap = MouseEventMonitor.shared.keyEventTap {
+            CGEvent.tapEnable(tap: tap, enable: true)
+        }
+        return Unmanaged.passRetained(event)
+    }
+
+    if type == .keyDown {
         let flags = event.flags
         let keyCode = CGKeyCode(event.getIntegerValueField(.keyboardEventKeycode))
         let passDown = MouseEventMonitor.shared.handleKey(flags: flags, keyCode: keyCode)

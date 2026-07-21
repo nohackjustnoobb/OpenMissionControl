@@ -239,6 +239,12 @@ struct SettingsView: View {
         SettingsDefaults.shortcutMinimize
     @AppStorage(SettingsDefaults.Key.shortcutMaximize) private var shortcutMaximize: Bool =
         SettingsDefaults.shortcutMaximize
+    @AppStorage(SettingsDefaults.Key.keyboardNavigation) private var keyboardNavigation: Bool =
+        SettingsDefaults.keyboardNavigation
+    @AppStorage(SettingsDefaults.Key.tabNavigationExtraKey) private var tabNavigationExtraKey:
+        NavigationKey = SettingsDefaults.tabNavigationExtraKey
+    @AppStorage(SettingsDefaults.Key.enterNavigationExtraKey) private var enterNavigationExtraKey:
+        NavigationKey = SettingsDefaults.enterNavigationExtraKey
     @AppStorage(SettingsDefaults.Key.rightClickAction) private var rightClickAction: WindowAction =
         SettingsDefaults.rightClickAction
     @AppStorage(SettingsDefaults.Key.middleClickAction) private var middleClickAction:
@@ -407,6 +413,28 @@ struct SettingsView: View {
                     sectionHeader("Keyboard Shortcuts")
 
                     SettingsCard {
+                        SettingToggleRow(
+                            title: "Tab Navigation",
+                            subtitle: "Cycle windows with Tab / ⇧Tab, activate with ↵",
+                            isOn: $keyboardNavigation
+                        )
+
+                        SettingsDivider()
+
+                        SettingPickerRow<NavigationKey>(
+                            title: "Tab Navigation Extra Key",
+                            selectedValue: $tabNavigationExtraKey
+                        )
+
+                        SettingsDivider()
+
+                        SettingPickerRow<NavigationKey>(
+                            title: "Enter Navigation Extra Key",
+                            selectedValue: $enterNavigationExtraKey
+                        )
+
+                        SettingsDivider()
+
                         SettingToggleRow(
                             title: "Quit (⌘Q)",
                             isOn: $shortcutQuit
