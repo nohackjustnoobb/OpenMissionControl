@@ -26,6 +26,10 @@ enum SettingsDefaults {
         static let shortcutMinimize = "shortcutMinimize"
         static let shortcutMaximize = "shortcutMaximize"
 
+        static let keyboardNavigation = "keyboardNavigation"
+        static let tabNavigationExtraKey = "tabNavigationExtraKey"
+        static let enterNavigationExtraKey = "enterNavigationExtraKey"
+
         static let rightClickAction = "rightClickAction"
         static let middleClickAction = "middleClickAction"
     }
@@ -46,6 +50,10 @@ enum SettingsDefaults {
     static let shortcutClose: Bool = false
     static let shortcutMinimize: Bool = false
     static let shortcutMaximize: Bool = false
+
+    static let keyboardNavigation: Bool = true
+    static let tabNavigationExtraKey: NavigationKey = .d
+    static let enterNavigationExtraKey: NavigationKey = .k
 
     static let rightClickAction: WindowAction = .none
     static let middleClickAction: WindowAction = .none

@@ -52,6 +52,48 @@ enum Instigator: Int, CaseIterable, DisplayNameable {
     }
 }
 
+/// A user-selectable extra key for Mission Control keyboard navigation. The raw value is the
+/// macOS virtual keycode of each letter (which are not alphabetical), so `keyCode` maps directly.
+/// `.none` disables the extra key. Cases are declared alphabetically for a tidy picker order.
+enum NavigationKey: Int, CaseIterable, DisplayNameable {
+    case none = -1
+    case a = 0
+    case b = 11
+    case c = 8
+    case d = 2
+    case e = 14
+    case f = 3
+    case g = 5
+    case h = 4
+    case i = 34
+    case j = 38
+    case k = 40
+    case l = 37
+    case m = 46
+    case n = 45
+    case o = 31
+    case p = 35
+    case q = 12
+    case r = 15
+    case s = 1
+    case t = 17
+    case u = 32
+    case v = 9
+    case w = 13
+    case x = 7
+    case y = 16
+    case z = 6
+
+    var displayName: String {
+        self == .none ? "None" : String(describing: self).uppercased()
+    }
+
+    /// The virtual keycode this key represents, or `nil` when disabled (`.none`).
+    var keyCode: CGKeyCode? {
+        self == .none ? nil : CGKeyCode(rawValue)
+    }
+}
+
 final class OpenMissionControlCore: ObservableObject {
     static let shared = OpenMissionControlCore()
     private let logger = Logger(
@@ -62,6 +104,10 @@ final class OpenMissionControlCore: ObservableObject {
 
     private var windows: [[String: Any]] = []
     private var windowFetchTimer: Timer?
+
+    /// Index into `sortedWindows` of the keyboard-selected window. `-1` means no keyboard
+    /// selection yet — the sentinel that keeps mouse-only usage untouched until the first Tab.
+    private var selectedIndex: Int = -1
     @AppStorage(SettingsDefaults.Key.updateDuration) private var updateDuration: Double =
         SettingsDefaults.updateDuration
     @AppStorage(SettingsDefaults.Key.shortcutQuit) private var shortcutQuit: Bool =
@@ -72,6 +118,12 @@ final class OpenMissionControlCore: ObservableObject {
         SettingsDefaults.shortcutMinimize
     @AppStorage(SettingsDefaults.Key.shortcutMaximize) private var shortcutMaximize: Bool =
         SettingsDefaults.shortcutMaximize
+    @AppStorage(SettingsDefaults.Key.keyboardNavigation) private var keyboardNavigation: Bool =
+        SettingsDefaults.keyboardNavigation
+    @AppStorage(SettingsDefaults.Key.tabNavigationExtraKey) private var tabNavigationExtraKey:
+        NavigationKey = SettingsDefaults.tabNavigationExtraKey
+    @AppStorage(SettingsDefaults.Key.enterNavigationExtraKey) private var enterNavigationExtraKey:
+        NavigationKey = SettingsDefaults.enterNavigationExtraKey
     @AppStorage(SettingsDefaults.Key.rightClickAction) private var rightClickAction: WindowAction =
         SettingsDefaults.rightClickAction
     @AppStorage(SettingsDefaults.Key.middleClickAction) private var middleClickAction:
@@ -161,6 +213,7 @@ final class OpenMissionControlCore: ObservableObject {
         logger.info("Mission Control state changed: \(state.rawValue)")
 
         if state.isActive {
+            selectedIndex = -1
             isOverlayShown = true
             showOverlay()
         } else {
@@ -176,6 +229,7 @@ final class OpenMissionControlCore: ObservableObject {
 
         logger.info("Active space changed, recreating windows and overlay.")
 
+        selectedIndex = -1
         recreateOverlay()
     }
 
@@ -226,9 +280,26 @@ final class OpenMissionControlCore: ObservableObject {
     // MARK: - Key Event Handling
 
     private func handleKeyPress(flags: CGEventFlags, keyCode: CGKeyCode) -> Bool {
-        guard isOverlayShown, let window = hoveredWindow else { return true }
+        guard isOverlayShown else { return true }
 
-        // Check for Command key
+        // Keyboard navigation: Tab / Shift+Tab cycle the selection, Return / Enter activates it.
+        // No modifier is required, so this must be handled before the Command-shortcut path below.
+        // Command is explicitly excluded so ⌘Tab (app switcher) keeps passing through untouched.
+        if keyboardNavigation, !flags.contains(.maskCommand) {
+            // Tab and Return/Enter are always active; the extra keys are user-configurable
+            // (default D to rotate, K to activate). If both map to the same key, rotate wins.
+            if keyCode == 48 || tabNavigationExtraKey.keyCode == keyCode {
+                moveSelection(by: flags.contains(.maskShift) ? -1 : 1)
+                return false
+            }
+            if keyCode == 36 || keyCode == 76 || enterNavigationExtraKey.keyCode == keyCode {
+                activateSelection()
+                return false
+            }
+        }
+
+        // Command-modified window actions operate on the hovered (or keyboard-selected) window.
+        guard let window = hoveredWindow else { return true }
         guard flags.contains(.maskCommand) else { return true }
 
         switch keyCode {
@@ -257,6 +328,108 @@ final class OpenMissionControlCore: ObservableObject {
         }
 
         return true
+    }
+
+    // MARK: - Keyboard Navigation
+
+    private func frame(of window: [String: Any]) -> CGRect? {
+        guard let bounds = window[kCGWindowBounds as String] as? [String: CGFloat],
+              let x = bounds["X"], let y = bounds["Y"],
+              let w = bounds["Width"], let h = bounds["Height"]
+        else { return nil }
+        return CGRect(x: x, y: y, width: w, height: h)
+    }
+
+    /// The point used to hover and click a thumbnail. Near the top-left corner rather than the
+    /// center: with "group windows by application", thumbnails stack and each front window hides
+    /// the center of the one behind it, so a center point can never reach the back windows. The
+    /// exposed top-left "shoulder" of each stacked window is unique to it. Kept below OMC's own
+    /// button overlay (top-left, ~48pt tall) so activating never accidentally presses a button.
+    private func selectionPoint(for frame: CGRect) -> CGPoint {
+        return CGPoint(x: frame.minX + 24, y: frame.minY + 64)
+    }
+
+    /// Windows ordered for Tab traversal: row first (top to bottom), then column (left to right).
+    /// More predictable visually than the z-order that `CGWindowListCopyWindowInfo` returns.
+    ///
+    /// Rows are built greedily from a stable top-to-bottom sort: a thumbnail joins the current
+    /// row when its top is within `rowTolerance` of that row's top, otherwise it starts a new row.
+    /// This is a deterministic total order — unlike a direct `abs(dy) > tol` comparator, which is
+    /// not a strict weak ordering and yields an unspecified result from `sorted`. Tune `rowTolerance`
+    /// if the tab order looks off.
+    private var sortedWindows: [[String: Any]] {
+        let rowTolerance: CGFloat = 50
+
+        let framed = windows.compactMap { win -> (win: [String: Any], frame: CGRect)? in
+            guard let f = frame(of: win) else { return nil }
+            return (win, f)
+        }
+        .sorted { $0.frame.minY < $1.frame.minY }
+
+        var rows: [[(win: [String: Any], frame: CGRect)]] = []
+        for item in framed {
+            if let rowTop = rows.last?.first?.frame.minY,
+               abs(item.frame.minY - rowTop) <= rowTolerance {
+                rows[rows.count - 1].append(item)
+            } else {
+                rows.append([item])
+            }
+        }
+
+        return rows.flatMap { row in
+            row.sorted { $0.frame.minX < $1.frame.minX }.map(\.win)
+        }
+    }
+
+    /// Moves the keyboard selection by `delta` (with wrap-around) and posts a synthetic
+    /// `.mouseMoved` to the selected thumbnail's center. Mission Control then draws its own
+    /// native highlight, and `hoveredWindow` syncs so the ⌘Q/W/M/F shortcuts keep working
+    /// against the keyboard selection without any change to their switch.
+    private func moveSelection(by delta: Int) {
+        let list = sortedWindows
+        guard !list.isEmpty else { return }
+
+        selectedIndex = selectedIndex < 0
+            ? (delta > 0 ? 0 : list.count - 1)
+            : ((selectedIndex + delta) % list.count + list.count) % list.count
+
+        guard let f = frame(of: list[selectedIndex]) else { return }
+        let pt = selectionPoint(for: f)
+
+        // NB: `.mouseMoved` (not CGWarpMouseCursorPosition) — Mission Control only repaints its
+        // highlight in response to an actual move event.
+        CGEvent(
+            mouseEventSource: nil, mouseType: .mouseMoved,
+            mouseCursorPosition: pt, mouseButton: .left
+        )?.post(tap: .cghidEventTap)
+
+        updateOverlay(at: pt) // sync hoveredWindow immediately instead of waiting for the poller
+    }
+
+    /// Activates the current keyboard selection by posting a synthetic left click on its
+    /// thumbnail center. The click flows through the normal `handleMouseClick` path, which
+    /// hides the overlay and lets Mission Control raise the window and dismiss itself.
+    private func activateSelection() {
+        let list = sortedWindows
+        guard selectedIndex >= 0, selectedIndex < list.count,
+              let f = frame(of: list[selectedIndex]) else { return }
+        let pt = selectionPoint(for: f)
+
+        let post: (CGEventType) -> Void = { type in
+            CGEvent(
+                mouseEventSource: nil, mouseType: type,
+                mouseCursorPosition: pt, mouseButton: .left
+            )?.post(tap: .cghidEventTap)
+        }
+
+        // Land Mission Control's hover on this thumbnail, then click it. The mouseUp is delayed:
+        // a zero-duration synthetic click is unreliably registered by Mission Control as a
+        // selection. The click flows through handleMouseClick, which raises the window.
+        post(.mouseMoved)
+        post(.leftMouseDown)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+            post(.leftMouseUp)
+        }
     }
 
     // MARK: - Window Fetching
