@@ -73,6 +73,8 @@ final class OpenMissionControlCore: ObservableObject {
         SettingsDefaults.updateDuration
     @AppStorage(SettingsDefaults.Key.overlayButtonScale) private var overlayButtonScale: Double =
         SettingsDefaults.overlayButtonScale
+    @AppStorage(SettingsDefaults.Key.restoreOverlayAfterDrag) private var restoreOverlayAfterDrag:
+        Bool = SettingsDefaults.restoreOverlayAfterDrag
     @AppStorage(SettingsDefaults.Key.shortcutQuit) private var shortcutQuit: Bool =
         SettingsDefaults.shortcutQuit
     @AppStorage(SettingsDefaults.Key.shortcutClose) private var shortcutClose: Bool =
@@ -226,8 +228,12 @@ final class OpenMissionControlCore: ObservableObject {
             case .left:
                 logger.debug(
                     "Captured left click on hovered window at (\(location.x), \(location.y)).")
-                windowDragState = .leftClickDownOnWindow
-                hideOverlay(keepInputMonitoring: true)
+                if restoreOverlayAfterDrag {
+                    windowDragState = .leftClickDownOnWindow
+                    hideOverlay(keepInputMonitoring: true)
+                } else {
+                    hideOverlay()
+                }
                 return true
             case .right:
                 logger.debug(

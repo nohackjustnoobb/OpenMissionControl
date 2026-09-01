@@ -18,6 +18,7 @@ enum SettingsDefaults {
 
         static let overlayTheme = "overlayTheme"
         static let overlayButtonScale = "overlayButtonScale"
+        static let restoreOverlayAfterDrag = "restoreOverlayAfterDrag"
 
         static let updateDuration = "updateDuration"
         static let mouseUpdateDuration = "mouseUpdateDuration"
@@ -41,6 +42,7 @@ enum SettingsDefaults {
 
     static let overlayTheme: OverlayTheme = .default
     static let overlayButtonScale: Double = 1.0
+    static let restoreOverlayAfterDrag: Bool = false
 
     static let updateDuration: Double = 0.25
     static let mouseUpdateDuration: Double = 0.1
