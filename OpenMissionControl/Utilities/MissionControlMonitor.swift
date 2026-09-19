@@ -6,11 +6,13 @@
 //
 
 // Based on implementations from lwouis's alt-tab-macos (GNU GPL v3.0):
-// - https://github.com/lwouis/alt-tab-macos/blob/master/src/api-wrappers/private-apis/ApplicationServices.HIServices.framework.swift
-// - https://github.com/lwouis/alt-tab-macos/blob/master/src/logic/events/DockEvents.swift
+// - https://github.com/lwouis/alt-tab-macos/blob/master/src/macos/api-wrappers/ApplicationServices.HIServices.framework.swift
+// - https://github.com/lwouis/alt-tab-macos/blob/master/src/events/DockEvents.swift
+// - https://github.com/lwouis/alt-tab-macos/blob/master/src/macos/api-wrappers/MissionControl.swift
 
 import AppKit
 import ApplicationServices
+import CoreGraphics
 import Foundation
 import os
 
@@ -43,34 +45,43 @@ class MissionControlMonitor {
     private(set) var isMonitoring: Bool = false
     private(set) var currentState: MissionControlState = .inactive
 
+    private var axUiElement: AXUIElement?
+    private var axObserver: AXObserver?
+    private var overlayPollTimer: Timer?
+
+    // macOS 27 stopped posting the Dock's AXExpose* notifications. Mission Control's
+    // WindowManager overlays remain observable without Screen Recording permission.
+    private let windowManagerProcessName = "WindowManager"
+    private let exposeShieldLevel = 19
+    private let showDesktopOverlayLevel = 18
+    private let spacesBarLevel = 14
+    private let overlayPollInterval: TimeInterval = 0.1
+
     // MARK: - Public Interface
 
     func setHandler(_ handler: @escaping StateHandler) {
         self.handler = handler
     }
 
-    private var axUiElement: AXUIElement?
-    private var axObserver: AXObserver?
-
     func start() {
         guard !isMonitoring else { return }
 
-        guard let dockPid = getDockPID() else { return }
-        axUiElement = AXUIElementCreateApplication(dockPid)
-        let selfPtr = Unmanaged.passUnretained(self).toOpaque()
-        AXObserverCreate(dockPid, axObserverCallback, &axObserver)
+        let isMacOS27OrLater = ProcessInfo.processInfo.operatingSystemVersion.majorVersion >= 27
+        let isAXMonitoring = startAXMonitoring()
 
-        guard let axObserver = axObserver, let axUiElement = axUiElement else { return }
-
-        for notification in MissionControlState.allCases {
-            AXObserverAddNotification(
-                axObserver, axUiElement, notification.rawValue as CFString, selfPtr)
+        if isMacOS27OrLater {
+            startOverlayMonitoring()
         }
 
-        CFRunLoopAddSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(axObserver), .commonModes)
+        guard isAXMonitoring || overlayPollTimer != nil else {
+            logger.error("Mission Control monitoring could not be started.")
+            return
+        }
 
         isMonitoring = true
-        logger.info("Mission Control monitoring started.")
+        logger.info(
+            "Mission Control monitoring started (AX: \(isAXMonitoring), overlays: \(self.overlayPollTimer != nil))."
+        )
     }
 
     func stop() {
@@ -86,7 +97,10 @@ class MissionControlMonitor {
 
         axObserver = nil
         axUiElement = nil
+        overlayPollTimer?.invalidate()
+        overlayPollTimer = nil
         isMonitoring = false
+        currentState = .inactive
         logger.info("Mission Control monitoring stopped.")
     }
 
@@ -97,6 +111,84 @@ class MissionControlMonitor {
 
         currentState = newState
         handler?(newState)
+    }
+
+    private func startAXMonitoring() -> Bool {
+        guard let dockPid = getDockPID() else {
+            logger.error("Could not find the Dock process.")
+            return false
+        }
+
+        let element = AXUIElementCreateApplication(dockPid)
+        var observer: AXObserver?
+        let createResult = AXObserverCreate(dockPid, axObserverCallback, &observer)
+        guard createResult == .success, let observer else {
+            logger.error("Could not create Dock AX observer: \(createResult.rawValue).")
+            return false
+        }
+
+        let selfPtr = Unmanaged.passUnretained(self).toOpaque()
+        for notification in MissionControlState.allCases {
+            let result = AXObserverAddNotification(
+                observer, element, notification.rawValue as CFString, selfPtr)
+            if result != .success {
+                logger.warning(
+                    "Could not observe \(notification.rawValue): \(result.rawValue).")
+            }
+        }
+
+        CFRunLoopAddSource(
+            CFRunLoopGetMain(), AXObserverGetRunLoopSource(observer), .commonModes)
+        axUiElement = element
+        axObserver = observer
+        return true
+    }
+
+    private func startOverlayMonitoring() {
+        updateStateFromWindowManagerOverlays()
+
+        let timer = Timer(timeInterval: overlayPollInterval, repeats: true) { [weak self] _ in
+            self?.updateStateFromWindowManagerOverlays()
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        overlayPollTimer = timer
+    }
+
+    private func updateStateFromWindowManagerOverlays() {
+        let windowList =
+            CGWindowListCopyWindowInfo(.optionOnScreenOnly, kCGNullWindowID)
+            as? [[String: Any]] ?? []
+
+        var hasExposeShield = false
+        var hasSpacesBar = false
+        var hasShowDesktopOverlay = false
+
+        for window in windowList {
+            guard
+                window[kCGWindowOwnerName as String] as? String == windowManagerProcessName,
+                let layer = window[kCGWindowLayer as String] as? Int
+            else { continue }
+
+            switch layer {
+            case exposeShieldLevel:
+                hasExposeShield = true
+            case showDesktopOverlayLevel:
+                hasShowDesktopOverlay = true
+            case spacesBarLevel:
+                hasSpacesBar = true
+            default:
+                continue
+            }
+        }
+
+        let state: MissionControlState
+        if hasExposeShield {
+            state = hasSpacesBar ? .showAllWindows : .showFrontWindows
+        } else {
+            state = hasShowDesktopOverlay ? .showDesktop : .inactive
+        }
+
+        notifyHandlerIfNeeded(newState: state)
     }
 
     private func getDockPID() -> pid_t? {
