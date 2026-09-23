@@ -45,10 +45,10 @@ class InputEventMonitor {
     fileprivate var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
 
-    // MARK: - Move Monitoring (CGEvent polling)
+    // MARK: - Move Monitoring (NSEvent)
 
-    private var moveThread: Thread?
-    private var stopMoveFlag: Bool = false
+    private var mouseMoveMonitor: Any?
+    private var lastMoveEventTimestamp: TimeInterval = 0
 
     // MARK: - Public Interface
 
@@ -76,6 +76,7 @@ class InputEventMonitor {
         guard !isMonitoring else { return }
 
         isMonitoring = true
+        lastMoveEventTimestamp = 0
 
         startInputMonitoring()
         startMoveMonitoring()
@@ -86,8 +87,9 @@ class InputEventMonitor {
     func stop() {
         guard isMonitoring else { return }
 
-        stopInputMonitoring()
         stopMoveMonitoring()
+        stopInputMonitoring()
+        lastMoveEventTimestamp = 0
 
         isMonitoring = false
         logger.info("Input event monitoring stopped.")
@@ -146,32 +148,29 @@ class InputEventMonitor {
 
     // MARK: - Private: Move Monitoring
 
-    // TODO: Performance optimizations (use event-based instead of pulling)
     private func startMoveMonitoring() {
-        stopMoveFlag = false
-        let thread = Thread { [weak self] in
-            guard let self else { return }
-            var lastLocation = CGPoint(x: -1, y: -1)
-            while !self.stopMoveFlag {
-                if let location = CGEvent(source: nil)?.location, location != lastLocation {
-                    lastLocation = location
-                    self.handleMove(to: location)
-                }
-                Thread.sleep(forTimeInterval: self.mouseUpdateDuration)
-            }
-        }
-        thread.name = "MouseMovePoller"
-        thread.qualityOfService = .userInteractive
-        moveThread = thread
-        thread.start()
+        guard mouseMoveMonitor == nil else { return }
 
-        logger.info("Mouse move monitor started (CGEvent polling).")
+        mouseMoveMonitor = NSEvent.addGlobalMonitorForEvents(matching: .mouseMoved) {
+            [weak self] event in
+            guard let self, let cgEvent = event.cgEvent else { return }
+
+            self.handleMove(to: cgEvent.location, timestamp: event.timestamp)
+        }
+
+        if mouseMoveMonitor == nil {
+            logger.error("Failed to create the global mouse move event monitor.")
+        } else {
+            logger.info("Mouse move event monitor started.")
+        }
     }
 
     private func stopMoveMonitoring() {
-        stopMoveFlag = true
-        moveThread = nil
-        logger.info("Mouse move monitor stopped.")
+        guard let mouseMoveMonitor else { return }
+
+        NSEvent.removeMonitor(mouseMoveMonitor)
+        self.mouseMoveMonitor = nil
+        logger.info("Mouse move event monitor stopped.")
     }
 
     // MARK: - Private Helpers
@@ -191,7 +190,14 @@ class InputEventMonitor {
         return mouseUpHandler?(location, button) ?? true
     }
 
-    private func handleMove(to location: CGPoint) {
+    private func handleMove(to location: CGPoint, timestamp: TimeInterval) {
+        let minimumInterval = max(0, mouseUpdateDuration)
+        guard
+            lastMoveEventTimestamp == 0 || timestamp < lastMoveEventTimestamp
+                || timestamp - lastMoveEventTimestamp >= minimumInterval
+        else { return }
+
+        lastMoveEventTimestamp = timestamp
         moveHandler?(location)
     }
 

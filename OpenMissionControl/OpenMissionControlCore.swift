@@ -192,6 +192,7 @@ final class OpenMissionControlCore: ObservableObject {
         logger.info("Mission Control state changed: \(state.rawValue)")
 
         if state.isActive {
+            setOverlayWindowExpanded(true)
             guard !isOverlayShown, pendingOverlayShowID == nil else { return }
 
             let showID = UUID()
@@ -210,6 +211,7 @@ final class OpenMissionControlCore: ObservableObject {
             pendingOverlayShowID = nil
             isOverlayShown = false
             hideOverlay()
+            setOverlayWindowExpanded(false)
         }
     }
 
@@ -422,6 +424,7 @@ final class OpenMissionControlCore: ObservableObject {
 
     private var overlayWindow: NSWindow?
     private var overlayContentView: NSHostingView<OverlayView>?
+    private let inactiveOverlayWindowSize = CGSize(width: 1, height: 1)
     private(set) var overlayRect: CGRect?
     private(set) var hoveredWindow: [String: Any]?
     private var windowDragState: WindowDragState = .none
@@ -702,8 +705,9 @@ final class OpenMissionControlCore: ObservableObject {
             return
         }
 
+        let inactiveFrame = CGRect(origin: desktopFrame.origin, size: inactiveOverlayWindowSize)
         let window = NSWindow(
-            contentRect: desktopFrame,
+            contentRect: inactiveFrame,
             styleMask: [.borderless],
             backing: .buffered,
             defer: false
@@ -721,7 +725,7 @@ final class OpenMissionControlCore: ObservableObject {
         window.ignoresMouseEvents = true
         window.isReleasedWhenClosed = false
 
-        let contentView = NSView(frame: NSRect(origin: .zero, size: desktopFrame.size))
+        let contentView = NSView(frame: NSRect(origin: .zero, size: inactiveFrame.size))
         contentView.wantsLayer = true
         contentView.layer?.backgroundColor = NSColor.clear.cgColor
         window.contentView = contentView
@@ -733,9 +737,26 @@ final class OpenMissionControlCore: ObservableObject {
         overlayWindow = window
         overlayContentView = overlayView
 
-        // The surface must be ordered before Mission Control starts. Its clear full-desktop
-        // content keeps it invisible until the small hosted overlay view is unhidden.
+        // The surface must be ordered before Mission Control starts.
+        // Keep it at one pixel while inactive so AppKit does not route desktop-wide mouse movement through its tracking areas.
         window.orderFrontRegardless()
+    }
+
+    private func setOverlayWindowExpanded(_ isExpanded: Bool) {
+        guard let overlayWindow else { return }
+
+        let desktopFrame = NSScreen.screens.reduce(CGRect.null) { frame, screen in
+            frame.union(screen.frame)
+        }
+        guard !desktopFrame.isNull, !desktopFrame.isEmpty else { return }
+
+        let targetFrame =
+            isExpanded
+            ? desktopFrame
+            : CGRect(origin: desktopFrame.origin, size: inactiveOverlayWindowSize)
+        guard overlayWindow.frame != targetFrame else { return }
+
+        overlayWindow.setFrame(targetFrame, display: false)
     }
 
     private func destroyOverlayWindow() {
