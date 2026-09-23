@@ -44,7 +44,7 @@ enum SettingsDefaults {
     static let overlayButtonScale: Double = 1.0
     static let restoreOverlayAfterDrag: Bool = false
 
-    static let updateDuration: Double = 0.25
+    static let updateDuration: Double = 0.1
     static let mouseUpdateDuration: Double = 0.1
 
     static let shortcutQuit: Bool = false

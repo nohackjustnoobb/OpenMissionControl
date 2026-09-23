@@ -68,6 +68,7 @@ final class OpenMissionControlCore: ObservableObject {
     // MARK: - Window State
 
     private var windows: [[String: Any]] = []
+    private var isMissionControlSurfaceVisible = false
     private var windowFetchTimer: Timer?
     @AppStorage(SettingsDefaults.Key.updateDuration) private var updateDuration: Double =
         SettingsDefaults.updateDuration
@@ -96,8 +97,6 @@ final class OpenMissionControlCore: ObservableObject {
     @Published private(set) var isRunning: Bool = false
     private var axTrustedTimer: Timer?
     private var wasAXTrusted: Bool = AXIsProcessTrusted()
-    private var pendingOverlayShowID: UUID?
-    private let missionControlAnimationDelay: TimeInterval = 0.3
 
     func start() {
         guard !isRunning else { return }
@@ -193,23 +192,8 @@ final class OpenMissionControlCore: ObservableObject {
 
         if state.isActive {
             setOverlayWindowExpanded(true)
-            guard !isOverlayShown, pendingOverlayShowID == nil else { return }
-
-            let showID = UUID()
-            pendingOverlayShowID = showID
-            DispatchQueue.main.asyncAfter(deadline: .now() + missionControlAnimationDelay) {
-                [weak self] in
-                guard let self, self.pendingOverlayShowID == showID else { return }
-
-                self.pendingOverlayShowID = nil
-                guard MissionControlMonitor.shared.currentState.isActive else { return }
-
-                self.isOverlayShown = true
-                self.showOverlay()
-            }
+            showOverlay()
         } else {
-            pendingOverlayShowID = nil
-            isOverlayShown = false
             hideOverlay()
             setOverlayWindowExpanded(false)
         }
@@ -252,10 +236,8 @@ final class OpenMissionControlCore: ObservableObject {
                     "Captured left click on hovered window at (\(location.x), \(location.y)).")
                 if restoreOverlayAfterDrag {
                     windowDragState = .leftClickDownOnWindow
-                    hideOverlay(keepInputMonitoring: true)
-                } else {
-                    hideOverlay()
                 }
+                hideOverlay(keepInputMonitoring: true)
                 return true
             case .right:
                 logger.debug(
@@ -275,7 +257,7 @@ final class OpenMissionControlCore: ObservableObject {
             }
         }
 
-        hideOverlay()
+        hideOverlay(keepInputMonitoring: true)
         return true
     }
 
@@ -297,7 +279,7 @@ final class OpenMissionControlCore: ObservableObject {
         guard button == .left, windowDragState != .none else { return true }
 
         let shouldRestoreOverlay = windowDragState == .leftClickDraggingWindow
-        if shouldRestoreOverlay, isOverlayShown {
+        if shouldRestoreOverlay, MissionControlMonitor.shared.currentState.isActive {
             logger.debug("Mouse released the dragged window, restoring overlay.")
             windowDragState = .leftClickUpAfterDraggedWindow
             recreateOverlay()
@@ -366,7 +348,7 @@ final class OpenMissionControlCore: ObservableObject {
         let windowName = window[kCGWindowName as String] as? String ?? ""
         logger.info("Return shortcut activated window: \(windowName)")
 
-        hideOverlay()
+        hideOverlay(keepInputMonitoring: true)
 
         let source = CGEventSource(stateID: .hidSystemState)
         let mouseDown = CGEvent(
@@ -393,6 +375,15 @@ final class OpenMissionControlCore: ObservableObject {
                 CGWindowListOption.optionOnScreenOnly,
                 kCGNullWindowID
             ) as? [[String: Any]] ?? []
+
+        if ProcessInfo.processInfo.operatingSystemVersion.majorVersion >= 27 {
+            isMissionControlSurfaceVisible = windowList.contains { window in
+                window[kCGWindowOwnerName as String] as? String == "WindowManager"
+                    && window[kCGWindowLayer as String] as? Int == 19
+            }
+        } else {
+            isMissionControlSurfaceVisible = MissionControlMonitor.shared.currentState.isActive
+        }
 
         let filteredWindows = windowList.filter { window in
             window[kCGWindowLayer as String] as? Int == 0
@@ -425,6 +416,7 @@ final class OpenMissionControlCore: ObservableObject {
     private var overlayWindow: NSWindow?
     private var overlayContentView: NSHostingView<OverlayView>?
     private let inactiveOverlayWindowSize = CGSize(width: 1, height: 1)
+    private var previousWindowFrames: [CGWindowID: CGRect]?
     private(set) var overlayRect: CGRect?
     private(set) var hoveredWindow: [String: Any]?
     private var windowDragState: WindowDragState = .none
@@ -438,6 +430,10 @@ final class OpenMissionControlCore: ObservableObject {
         }
 
         DispatchQueue.main.async { [self] in
+            // A move or timer refresh may already be queued when a click hides the
+            // overlay. Do not let that stale update make the content visible again.
+            guard isOverlayShown else { return }
+
             if let rect = overlayRect {
                 let isHovering = hoveredWindow != nil && rect.contains(mouseLocation)
                 if isOverlayHovered != isHovering {
@@ -578,7 +574,7 @@ final class OpenMissionControlCore: ObservableObject {
         case .zoom:
             logger.info("\(instigator.displayName) Maximize triggered on window: \(windowName)")
             _ = CoreDockSendNotification("com.apple.expose.awake" as CFString, 0)
-            hideOverlay()
+            hideOverlay(keepInputMonitoring: true)
             performOSWindowAction(window: window, action: kAXZoomButtonAttribute)
         case .close:
             logger.info("\(instigator.displayName) Close triggered on window: \(windowName)")
@@ -646,34 +642,59 @@ final class OpenMissionControlCore: ObservableObject {
         prepareOverlayWindow()
 
         if windowFetchTimer == nil {
-            fetchWindows()
-
+            previousWindowFrames = nil
             windowFetchTimer = Timer.scheduledTimer(withTimeInterval: updateDuration, repeats: true)
             { [weak self] _ in
-                self?.fetchWindows()
+                self?.refreshOverlayAfterWindowFetch()
             }
         }
 
-        // Start mouse monitoring when overlay is visible
         InputEventMonitor.shared.start()
+        refreshOverlayAfterWindowFetch()
+    }
 
-        // Do an initial overlay update with current mouse position.
-        // (Skip the update after a window drag to ensure that the overlay doesn't
-        // get shown immediately at the coordinates where the drag ended, because
-        // this would result in rendering the overlay at invalid position.)
-        if windowDragState == .none {
-            if let mouseLocation = CGEvent(source: nil)?.location {
-                updateOverlay(at: mouseLocation)
-            }
-        } else {
-            windowDragState = .none
+    private func refreshOverlayAfterWindowFetch() {
+        fetchWindows()
+
+        let currentWindowFrames = windowFrameSnapshot()
+        let framesAreStable = !currentWindowFrames.isEmpty
+            && previousWindowFrames == currentWindowFrames
+        previousWindowFrames = currentWindowFrames.isEmpty ? nil : currentWindowFrames
+        isOverlayShown = framesAreStable
+
+        guard framesAreStable else {
+            overlayContentView?.isHidden = true
+            overlayRect = nil
+            hoveredWindow = nil
+            isOverlayHovered = false
+            return
+        }
+
+        if let mouseLocation = CGEvent(source: nil)?.location {
+            updateOverlay(at: mouseLocation)
         }
     }
 
+    private func windowFrameSnapshot() -> [CGWindowID: CGRect] {
+        guard isMissionControlSurfaceVisible else { return [:] }
+
+        return Dictionary<CGWindowID, CGRect>(
+            uniqueKeysWithValues: windows.compactMap { window in
+                guard let windowID = window[kCGWindowNumber as String] as? CGWindowID,
+                    let bounds = window[kCGWindowBounds as String] as? [String: CGFloat],
+                    let x = bounds["X"],
+                    let y = bounds["Y"],
+                    let width = bounds["Width"],
+                    let height = bounds["Height"]
+                else { return nil }
+
+                return (windowID, CGRect(x: x, y: y, width: width, height: height))
+            })
+    }
+
     func hideOverlay(keepInputMonitoring: Bool = false) {
-        pendingOverlayShowID = nil
-        windowFetchTimer?.invalidate()
-        windowFetchTimer = nil
+        previousWindowFrames = nil
+        isOverlayShown = false
         overlayContentView?.isHidden = true
         overlayRect = nil
         hoveredWindow = nil
@@ -683,14 +704,14 @@ final class OpenMissionControlCore: ObservableObject {
             return
         }
 
+        windowFetchTimer?.invalidate()
+        windowFetchTimer = nil
         windowDragState = .none
         InputEventMonitor.shared.stop()
     }
 
     func recreateOverlay() {
-        overlayContentView?.isHidden = true
-        overlayRect = nil
-        hoveredWindow = nil
+        hideOverlay(keepInputMonitoring: true)
         showOverlay()
     }
 

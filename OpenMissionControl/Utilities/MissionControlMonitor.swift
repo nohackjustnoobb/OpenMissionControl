@@ -87,6 +87,7 @@ class MissionControlMonitor {
     private var overlayUpdateWorkItem: DispatchWorkItem?
     private var areWindowServerNotificationsRegistered = false
     private var isOverlayEventMonitoring = false
+    private var isOverlayStateAuthoritative = false
     private var subscribedWindowIDs = Set<CGWindowID>()
     private let registerConnectionNotifyProc = skyLightSymbol(
         "SLSRegisterConnectionNotifyProc",
@@ -126,6 +127,7 @@ class MissionControlMonitor {
         let isAXMonitoring = startAXMonitoring()
 
         let isOverlayMonitoring = isMacOS27OrLater ? startOverlayMonitoring() : false
+        isOverlayStateAuthoritative = isMacOS27OrLater && isOverlayMonitoring
 
         guard isAXMonitoring || isOverlayMonitoring else {
             logger.error("Mission Control monitoring could not be started.")
@@ -152,6 +154,7 @@ class MissionControlMonitor {
         axObserver = nil
         axUiElement = nil
         isOverlayEventMonitoring = false
+        isOverlayStateAuthoritative = false
         overlayUpdateWorkItem?.cancel()
         overlayUpdateWorkItem = nil
         overlayPollTimer?.invalidate()
@@ -168,6 +171,17 @@ class MissionControlMonitor {
 
         currentState = newState
         handler?(newState)
+    }
+
+    fileprivate func axStateChanged(_ state: MissionControlState) {
+        guard isOverlayStateAuthoritative else {
+            notifyHandlerIfNeeded(newState: state)
+            return
+        }
+
+        // AXExpose notifications can arrive out of order when Mission Control is closed and reopened quickly on macOS 27.
+        // Reconcile them against the actual WindowManager surfaces instead of accepting the stale AX state.
+        windowServerSurfacesChanged()
     }
 
     private func startAXMonitoring() -> Bool {
@@ -374,7 +388,7 @@ private let windowServerNotificationCallback: CGSConnectionNotifyProc = {
 
 /// Top-level C-compatible callback required by AXObserverCreate.
 /// Recovers the `MissionControlMonitor` instance from `refcon` and
-/// forwards the notification to `notifyHandlerIfNeeded`.
+/// forwards the notification to the monitor's active state source.
 private func axObserverCallback(
     _: AXObserver,
     _: AXUIElement,
@@ -386,6 +400,6 @@ private func axObserverCallback(
     let monitor = Unmanaged<MissionControlMonitor>.fromOpaque(refcon).takeUnretainedValue()
 
     if let state = MissionControlState(rawValue: notification as String) {
-        monitor.notifyHandlerIfNeeded(newState: state)
+        monitor.axStateChanged(state)
     }
 }
