@@ -96,6 +96,8 @@ final class OpenMissionControlCore: ObservableObject {
     @Published private(set) var isRunning: Bool = false
     private var axTrustedTimer: Timer?
     private var wasAXTrusted: Bool = AXIsProcessTrusted()
+    private var pendingOverlayShowID: UUID?
+    private let missionControlAnimationDelay: TimeInterval = 0.3
 
     func start() {
         guard !isRunning else { return }
@@ -190,9 +192,22 @@ final class OpenMissionControlCore: ObservableObject {
         logger.info("Mission Control state changed: \(state.rawValue)")
 
         if state.isActive {
-            isOverlayShown = true
-            showOverlay()
+            guard !isOverlayShown, pendingOverlayShowID == nil else { return }
+
+            let showID = UUID()
+            pendingOverlayShowID = showID
+            DispatchQueue.main.asyncAfter(deadline: .now() + missionControlAnimationDelay) {
+                [weak self] in
+                guard let self, self.pendingOverlayShowID == showID else { return }
+
+                self.pendingOverlayShowID = nil
+                guard MissionControlMonitor.shared.currentState.isActive else { return }
+
+                self.isOverlayShown = true
+                self.showOverlay()
+            }
         } else {
+            pendingOverlayShowID = nil
             isOverlayShown = false
             hideOverlay()
         }
@@ -653,6 +668,7 @@ final class OpenMissionControlCore: ObservableObject {
     }
 
     func hideOverlay(keepInputMonitoring: Bool = false) {
+        pendingOverlayShowID = nil
         windowFetchTimer?.invalidate()
         windowFetchTimer = nil
         overlayContentView?.isHidden = true

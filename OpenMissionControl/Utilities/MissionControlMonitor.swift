@@ -55,7 +55,7 @@ class MissionControlMonitor {
     private let exposeShieldLevel = 19
     private let showDesktopOverlayLevel = 18
     private let spacesBarLevel = 14
-    private let overlayPollInterval: TimeInterval = 0.1
+    private let overlayPollInterval: TimeInterval = 0.25
 
     // MARK: - Public Interface
 
