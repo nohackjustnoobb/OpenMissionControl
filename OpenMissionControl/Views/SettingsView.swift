@@ -215,6 +215,13 @@ struct SettingsDivider: View {
     }
 }
 
+private enum SettingsTab: Hashable {
+    case general
+    case overlay
+    case shortcuts
+    case about
+}
+
 // MARK: - Main Settings View
 
 struct SettingsView: View {
@@ -252,28 +259,53 @@ struct SettingsView: View {
         WindowAction = SettingsDefaults.middleClickAction
 
     @State private var launchAtLogin: Bool = LaunchAtLoginManager.isEnabled
+    @State private var selectedTab: SettingsTab = .general
     private let logger = Logger(
         subsystem: "dev.travisxu.OpenMissionControl", category: "SettingsView"
     )
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                // MARK: Permissions
+        TabView(selection: $selectedTab) {
+            generalTab
+                .tabItem {
+                    Label("General", systemImage: "gearshape")
+                }
+                .tag(SettingsTab.general)
 
+            overlayTab
+                .tabItem {
+                    Label("Overlay", systemImage: "rectangle.on.rectangle")
+                }
+                .tag(SettingsTab.overlay)
+
+            shortcutTab
+                .tabItem {
+                    Label("Shortcuts", systemImage: "keyboard")
+                }
+                .tag(SettingsTab.shortcuts)
+
+            aboutTab
+                .tabItem {
+                    Label("About", systemImage: "info.circle")
+                }
+                .tag(SettingsTab.about)
+        }
+        .frame(minWidth: 520, minHeight: 600)
+        .tabViewStyle(.automatic)
+    }
+
+    private var generalTab: some View {
+        settingsScrollView {
+            VStack(alignment: .leading, spacing: 20) {
                 VStack(alignment: .leading, spacing: 6) {
                     sectionHeader("Permissions")
-
                     SettingsCard {
                         AccessibilityRow()
                     }
                 }
 
-                // MARK: General
-
                 VStack(alignment: .leading, spacing: 6) {
                     sectionHeader("General")
-
                     SettingsCard {
                         SettingToggleRow(
                             icon: "menubar.rectangle",
@@ -302,52 +334,31 @@ struct SettingsView: View {
                         }
 
                         SettingsDivider()
-
-                        VStack(alignment: .leading, spacing: 4) {
-                            HStack {
-                                Text("Window Update Duration")
-                                    .font(.system(size: 13, weight: .medium))
-                                Spacer()
-                                Text(String(format: "%.2f s", updateDuration))
-                                    .font(.system(size: 11))
-                                    .foregroundStyle(.secondary)
-                            }
-                            Slider(value: $updateDuration, in: 0.05...2.0, step: 0.05)
-                                .controlSize(.small)
-                            Text("The interval for polling window state.")
-                                .font(.system(size: 11))
-                                .foregroundStyle(.secondary)
-                        }
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 8)
+                        durationRow(
+                            title: "Window Update Duration",
+                            value: $updateDuration,
+                            range: 0.05...2.0,
+                            help: "The interval for polling window state."
+                        )
 
                         SettingsDivider()
-
-                        VStack(alignment: .leading, spacing: 4) {
-                            HStack {
-                                Text("Mouse Update Duration")
-                                    .font(.system(size: 13, weight: .medium))
-                                Spacer()
-                                Text(String(format: "%.2f s", mouseUpdateDuration))
-                                    .font(.system(size: 11))
-                                    .foregroundStyle(.secondary)
-                            }
-                            Slider(value: $mouseUpdateDuration, in: 0.05...1.0, step: 0.05)
-                                .controlSize(.small)
-                            Text("The interval for polling mouse state.")
-                                .font(.system(size: 11))
-                                .foregroundStyle(.secondary)
-                        }
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 8)
+                        durationRow(
+                            title: "Mouse Update Duration",
+                            value: $mouseUpdateDuration,
+                            range: 0.05...1.0,
+                            help: "The interval for polling mouse state."
+                        )
                     }
                 }
+            }
+        }
+    }
 
-                // MARK: Overlay Buttons
-
+    private var overlayTab: some View {
+        settingsScrollView {
+            VStack(alignment: .leading, spacing: 20) {
                 VStack(alignment: .leading, spacing: 6) {
                     sectionHeader("Overlay")
-
                     SettingsCard {
                         SettingPickerRow<OverlayTheme>(
                             icon: "paintpalette.fill",
@@ -357,29 +368,7 @@ struct SettingsView: View {
                         )
 
                         SettingsDivider()
-
-                        VStack(alignment: .leading, spacing: 4) {
-                            HStack {
-                                Text("Overlay Size")
-                                    .font(.system(size: 13, weight: .medium))
-                                Spacer()
-                                Text(String(format: "%.0f%%", overlayButtonScale * 100))
-                                    .font(.system(size: 11))
-                                    .foregroundStyle(.secondary)
-                            }
-                            Slider(
-                                value: $overlayButtonScale,
-                                in: OverlaySizing.scaleRange,
-                                step: OverlaySizing.scaleStep
-                            )
-                            .controlSize(.small)
-                            Text("The size of the Mission Control overlay.")
-                                .font(.system(size: 11))
-                                .foregroundStyle(.secondary)
-                        }
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 8)
-
+                        overlaySizeRow
                         SettingsDivider()
 
                         SettingToggleRow(
@@ -390,7 +379,6 @@ struct SettingsView: View {
                         )
 
                         SettingsDivider()
-
                         SettingToggleRow(
                             icon: "xmark",
                             iconColor: solidColor(color: .red),
@@ -399,7 +387,6 @@ struct SettingsView: View {
                         )
 
                         SettingsDivider()
-
                         SettingToggleRow(
                             icon: "minus",
                             iconColor: solidColor(color: .yellow),
@@ -408,7 +395,6 @@ struct SettingsView: View {
                         )
 
                         SettingsDivider()
-
                         SettingToggleRow(
                             icon: "arrow.up.backward.and.arrow.down.forward",
                             iconColor: solidColor(color: .green),
@@ -417,8 +403,6 @@ struct SettingsView: View {
                         )
                     }
                 }
-
-                // MARK: Preview
 
                 if showQuitButton || showCloseButton || showMinimizeButton || showZoomButton {
                     VStack(alignment: .leading, spacing: 6) {
@@ -440,73 +424,54 @@ struct SettingsView: View {
                         )
                     }
                 }
+            }
+        }
+    }
 
-                // MARK: Keyboard Shortcuts
-
+    private var shortcutTab: some View {
+        settingsScrollView {
+            VStack(alignment: .leading, spacing: 20) {
                 VStack(alignment: .leading, spacing: 6) {
                     sectionHeader("Keyboard Shortcuts")
-
                     SettingsCard {
                         SettingToggleRow(
                             title: "Activate Window (Return/Enter)",
                             isOn: $shortcutActivateWindow
                         )
-
                         SettingsDivider()
-
-                        SettingToggleRow(
-                            title: "Quit (⌘Q)",
-                            isOn: $shortcutQuit
-                        )
-
+                        SettingToggleRow(title: "Quit (⌘Q)", isOn: $shortcutQuit)
                         SettingsDivider()
-
-                        SettingToggleRow(
-                            title: "Close (⌘W)",
-                            isOn: $shortcutClose
-                        )
-
+                        SettingToggleRow(title: "Close (⌘W)", isOn: $shortcutClose)
                         SettingsDivider()
-
-                        SettingToggleRow(
-                            title: "Minimize (⌘M)",
-                            isOn: $shortcutMinimize
-                        )
-
+                        SettingToggleRow(title: "Minimize (⌘M)", isOn: $shortcutMinimize)
                         SettingsDivider()
-
-                        SettingToggleRow(
-                            title: "Maximize (⌘F)",
-                            isOn: $shortcutMaximize
-                        )
+                        SettingToggleRow(title: "Maximize (⌘F)", isOn: $shortcutMaximize)
                     }
                 }
 
-                // MARK: Mouse Shortcuts
-
                 VStack(alignment: .leading, spacing: 6) {
                     sectionHeader("Mouse Shortcuts")
-
                     SettingsCard {
                         SettingPickerRow<WindowAction>(
                             title: "Right-click action",
                             selectedValue: $rightClickAction
                         )
-
                         SettingsDivider()
-
                         SettingPickerRow<WindowAction>(
                             title: "Middle-click action",
                             selectedValue: $middleClickAction
                         )
                     }
                 }
+            }
+        }
+    }
 
-                // MARK: About
-
+    private var aboutTab: some View {
+        settingsScrollView {
+            VStack(alignment: .leading, spacing: 20) {
                 VStack(alignment: .leading, spacing: 6) {
                     sectionHeader("About")
-
                     SettingsCard {
                         HStack {
                             VStack(alignment: .leading, spacing: 2) {
@@ -515,6 +480,7 @@ struct SettingsView: View {
                                         ?? "Open Mission Control"
                                 )
                                 .font(.system(size: 13, weight: .medium))
+
                                 if let version = Bundle.main.infoDictionary?[
                                     "CFBundleShortVersionString"
                                 ] as? String,
@@ -526,7 +492,9 @@ struct SettingsView: View {
                                         .foregroundStyle(.secondary)
                                 }
                             }
+
                             Spacer()
+
                             Link(
                                 destination: URL(
                                     string: "https://github.com/nohackjustnoobb/OpenMissionControl"
@@ -545,12 +513,70 @@ struct SettingsView: View {
                     }
                 }
             }
-            .padding(16)
-            .frame(width: 400)
         }
     }
 
-    // MARK: Helpers
+    @ViewBuilder
+    private func settingsScrollView<Content: View>(
+        @ViewBuilder content: @escaping () -> Content
+    ) -> some View {
+        GeometryReader { geometry in
+            ScrollView {
+                content()
+                    .padding(16)
+                    .frame(width: geometry.size.width, alignment: .leading)
+            }
+        }
+    }
+
+    private func durationRow(
+        title: String,
+        value: Binding<Double>,
+        range: ClosedRange<Double>,
+        help: String
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text(title)
+                    .font(.system(size: 13, weight: .medium))
+                Spacer()
+                Text(String(format: "%.2f s", value.wrappedValue))
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+            }
+            Slider(value: value, in: range, step: 0.05)
+                .controlSize(.small)
+            Text(help)
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
+    }
+
+    private var overlaySizeRow: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text("Overlay Size")
+                    .font(.system(size: 13, weight: .medium))
+                Spacer()
+                Text(String(format: "%.0f%%", overlayButtonScale * 100))
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+            }
+            Slider(
+                value: $overlayButtonScale,
+                in: OverlaySizing.scaleRange,
+                step: OverlaySizing.scaleStep
+            )
+            .controlSize(.small)
+            Text("The size of the Mission Control overlay.")
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
+    }
 
     private func sectionHeader(_ title: String) -> some View {
         Text(title.uppercased())
