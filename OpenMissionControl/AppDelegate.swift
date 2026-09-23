@@ -11,6 +11,12 @@ import Foundation
 @MainActor
 class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem?
+    private let openSettingsOnLaunch: Bool
+
+    init(openSettingsOnLaunch: Bool = false) {
+        self.openSettingsOnLaunch = openSettingsOnLaunch
+        super.init()
+    }
 
     func applicationDidFinishLaunching(_: Notification) {
         let options =
@@ -19,6 +25,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         OpenMissionControlCore.shared.start()
         setupStatusItem()
+
+        if openSettingsOnLaunch {
+            SettingsViewManager.shared.showSettings()
+        }
     }
 
     func applicationWillTerminate(_: Notification) {

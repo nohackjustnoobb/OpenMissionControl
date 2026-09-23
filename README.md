@@ -43,8 +43,12 @@ sudo xattr -rd com.apple.quarantine /Applications/Open\ Mission\ Control.app
 
 ### First-Time Setup
 
-1. Open the app and grant **Accessibility** permissions when prompted in System Settings.
+1. Open the app and grant permission under **Device Control and Data Access** on macOS 27, or **Accessibility** on earlier macOS versions, when prompted in System Settings.
 2. _Note: Sometimes an app restart is needed for it to function properly._
+
+### Developer Note
+
+macOS manages this permission separately for the debug build and the installed app. When testing a different version, remove the previous version's entry from **System Settings > Privacy & Security > Device Control and Data Access** on macOS 27, or **Accessibility** on earlier macOS versions, before granting permission to the new version.
 
 ## Credits
 
