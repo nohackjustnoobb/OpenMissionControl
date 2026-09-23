@@ -11,6 +11,7 @@ enum SettingsDefaults {
     // MARK: - Keys
 
     enum Key {
+        static let showMenuBarIcon = "showMenuBarIcon"
         static let showQuitButton = "showQuitButton"
         static let showCloseButton = "showCloseButton"
         static let showMinimizeButton = "showMinimizeButton"
@@ -34,6 +35,7 @@ enum SettingsDefaults {
 
     // MARK: - Defaults
 
+    static let showMenuBarIcon: Bool = true
     static let showQuitButton: Bool = false
     static let showCloseButton: Bool = true
     static let showMinimizeButton: Bool = true

@@ -218,6 +218,8 @@ struct SettingsDivider: View {
 // MARK: - Main Settings View
 
 struct SettingsView: View {
+    @AppStorage(SettingsDefaults.Key.showMenuBarIcon) private var showMenuBarIcon: Bool =
+        SettingsDefaults.showMenuBarIcon
     @AppStorage(SettingsDefaults.Key.showQuitButton) private var showQuitButton: Bool =
         SettingsDefaults.showQuitButton
     @AppStorage(SettingsDefaults.Key.showCloseButton) private var showCloseButton: Bool =
@@ -273,6 +275,15 @@ struct SettingsView: View {
                     sectionHeader("General")
 
                     SettingsCard {
+                        SettingToggleRow(
+                            icon: "menubar.rectangle",
+                            title: "Show Menu Bar Icon",
+                            subtitle: "Keep quick access to Settings and Quit.",
+                            isOn: $showMenuBarIcon
+                        )
+
+                        SettingsDivider()
+
                         SettingToggleRow(
                             title: "Launch at Login",
                             isOn: $launchAtLogin
