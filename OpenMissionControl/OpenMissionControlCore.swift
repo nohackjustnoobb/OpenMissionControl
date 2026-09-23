@@ -657,7 +657,8 @@ final class OpenMissionControlCore: ObservableObject {
         fetchWindows()
 
         let currentWindowFrames = windowFrameSnapshot()
-        let framesAreStable = !currentWindowFrames.isEmpty
+        let framesAreStable =
+            !currentWindowFrames.isEmpty
             && previousWindowFrames == currentWindowFrames
         previousWindowFrames = currentWindowFrames.isEmpty ? nil : currentWindowFrames
         isOverlayShown = framesAreStable
@@ -678,7 +679,7 @@ final class OpenMissionControlCore: ObservableObject {
     private func windowFrameSnapshot() -> [CGWindowID: CGRect] {
         guard isMissionControlSurfaceVisible else { return [:] }
 
-        return Dictionary<CGWindowID, CGRect>(
+        return [CGWindowID: CGRect](
             uniqueKeysWithValues: windows.compactMap { window in
                 guard let windowID = window[kCGWindowNumber as String] as? CGWindowID,
                     let bounds = window[kCGWindowBounds as String] as? [String: CGFloat],

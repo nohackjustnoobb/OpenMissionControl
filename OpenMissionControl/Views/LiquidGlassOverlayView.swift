@@ -1,13 +1,14 @@
 //
-//  DefaultOverlayView.swift
+//  LiquidGlassOverlayView.swift
 //  OpenMissionControl
 //
-//  Created by Travis XU on 21/3/2026.
+//  Created by Travis XU on 23/9/2026.
 //
 
 import SwiftUI
 
-struct DefaultOverlayView: View {
+@available(macOS 26.0, *)
+struct LiquidGlassOverlayView: View {
     let sizing: OverlaySizing
 
     @Environment(\.isPreview) private var isPreview
@@ -43,14 +44,7 @@ struct DefaultOverlayView: View {
         }
         .padding(.horizontal, sizing.horizontalPadding)
         .padding(.vertical, sizing.verticalPadding)
-        .background(
-            Capsule()
-                .fill(Color(NSColor.windowBackgroundColor).opacity(0.95))
-        )
-        .overlay(
-            Capsule()
-                .stroke(Color.primary.opacity(0.15), lineWidth: sizing.borderWidth)
-        )
+        .glassEffect(.regular, in: Capsule())
     }
 
     private func trafficLight(color: Color, icon: String, iconSize: CGFloat) -> some View {
@@ -58,21 +52,28 @@ struct DefaultOverlayView: View {
             Circle()
                 .fill(
                     LinearGradient(
-                        colors: [color.opacity(0.85), color],
-                        startPoint: .top,
-                        endPoint: .bottom
+                        colors: [
+                            color.opacity(0.88),
+                            color.opacity(0.70),
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
                     )
                 )
+                .overlay {
+                    Circle()
+                        .stroke(Color.white.opacity(0.28), lineWidth: sizing.borderWidth)
+                }
                 .frame(width: sizing.buttonSize, height: sizing.buttonSize)
                 .shadow(
-                    color: color.opacity(0.4), radius: sizing.shadowRadius,
+                    color: color.opacity(0.18), radius: 2 * sizing.scale,
                     x: 0, y: sizing.shadowYOffset
                 )
+
             Image(systemName: icon)
                 .font(.system(size: iconSize * sizing.scale, weight: .bold))
-                .foregroundColor(
-                    (openMissionControlCore.isOverlayHovered || isPreview)
-                        ? Color.black.opacity(0.45) : .clear)
+                .foregroundStyle(Color.black.opacity(0.45))
+                .opacity((openMissionControlCore.isOverlayHovered || isPreview) ? 1 : 0)
         }
     }
 }

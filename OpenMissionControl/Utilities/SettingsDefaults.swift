@@ -40,7 +40,13 @@ enum SettingsDefaults {
     static let showMinimizeButton: Bool = true
     static let showZoomButton: Bool = true
 
-    static let overlayTheme: OverlayTheme = .default
+    static var overlayTheme: OverlayTheme {
+        if #available(macOS 26.0, *) {
+            return .liquidGlass
+        }
+
+        return .classic
+    }
     static let overlayButtonScale: Double = 1.0
     static let restoreOverlayAfterDrag: Bool = false
 
