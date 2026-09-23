@@ -230,8 +230,6 @@ struct SettingsView: View {
         SettingsDefaults.overlayTheme
     @AppStorage(SettingsDefaults.Key.overlayButtonScale) private var overlayButtonScale: Double =
         SettingsDefaults.overlayButtonScale
-    @AppStorage(SettingsDefaults.Key.restoreOverlayAfterDrag) private var restoreOverlayAfterDrag:
-        Bool = SettingsDefaults.restoreOverlayAfterDrag
     @AppStorage(SettingsDefaults.Key.updateDuration) private var updateDuration: Double =
         SettingsDefaults.updateDuration
     @AppStorage(SettingsDefaults.Key.mouseUpdateDuration) private var mouseUpdateDuration: Double =
@@ -340,16 +338,6 @@ struct SettingsView: View {
                     sectionHeader("Overlay")
 
                     SettingsCard {
-                        SettingToggleRow(
-                            icon: "arrow.counterclockwise",
-                            iconColor: solidColor(color: .blue),
-                            title: "Restore Overlay After Drag",
-                            subtitle: "Show the overlay again after dragging a window.",
-                            isOn: $restoreOverlayAfterDrag
-                        )
-
-                        SettingsDivider()
-
                         SettingPickerRow<OverlayTheme>(
                             icon: "paintpalette.fill",
                             iconColor: rainbowColor,

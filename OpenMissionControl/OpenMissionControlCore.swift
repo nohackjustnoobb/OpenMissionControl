@@ -38,13 +38,6 @@ enum WindowAction: Int, CaseIterable, DisplayNameable {
     }
 }
 
-enum WindowDragState: Int, CaseIterable {
-    case none = 0
-    case leftClickDownOnWindow = 1
-    case leftClickDraggingWindow = 2
-    case leftClickUpAfterDraggedWindow = 3
-}
-
 enum Instigator: Int, CaseIterable, DisplayNameable {
     case overlay
     case keyboard
@@ -74,8 +67,6 @@ final class OpenMissionControlCore: ObservableObject {
         SettingsDefaults.updateDuration
     @AppStorage(SettingsDefaults.Key.overlayButtonScale) private var overlayButtonScale: Double =
         SettingsDefaults.overlayButtonScale
-    @AppStorage(SettingsDefaults.Key.restoreOverlayAfterDrag) private var restoreOverlayAfterDrag:
-        Bool = SettingsDefaults.restoreOverlayAfterDrag
     @AppStorage(SettingsDefaults.Key.shortcutQuit) private var shortcutQuit: Bool =
         SettingsDefaults.shortcutQuit
     @AppStorage(SettingsDefaults.Key.shortcutClose) private var shortcutClose: Bool =
@@ -134,16 +125,6 @@ final class OpenMissionControlCore: ObservableObject {
             self.logger.debug(
                 "Mouse clicked at: \(location.x), \(location.y) (button: \(button.rawValue))")
             return self.handleMouseClick(at: location, with: button)
-        }
-        InputEventMonitor.shared.setDragHandler { [weak self] location, button in
-            guard let self = self else { return }
-
-            self.handleMouseDrag(at: location, with: button)
-        }
-        InputEventMonitor.shared.setMouseUpHandler { [weak self] location, button in
-            guard let self = self else { return true }
-
-            return self.handleMouseUp(at: location, with: button)
         }
         InputEventMonitor.shared.setMoveHandler { [weak self] location in
             guard let self = self else { return }
@@ -234,9 +215,6 @@ final class OpenMissionControlCore: ObservableObject {
             case .left:
                 logger.debug(
                     "Captured left click on hovered window at (\(location.x), \(location.y)).")
-                if restoreOverlayAfterDrag {
-                    windowDragState = .leftClickDownOnWindow
-                }
                 hideOverlay(keepInputMonitoring: true)
                 return true
             case .right:
@@ -262,32 +240,7 @@ final class OpenMissionControlCore: ObservableObject {
     }
 
     private func handleMouseMove(to location: CGPoint) {
-        guard windowDragState == .none else { return }
-
         updateOverlay(at: location)
-    }
-
-    private func handleMouseDrag(at _: CGPoint, with button: CGMouseButton) {
-        guard button == .left, windowDragState == .leftClickDownOnWindow else { return }
-
-        logger.debug("Mouse started dragging the clicked window.")
-        windowDragState = .leftClickDraggingWindow
-    }
-
-    @discardableResult
-    private func handleMouseUp(at _: CGPoint, with button: CGMouseButton) -> Bool {
-        guard button == .left, windowDragState != .none else { return true }
-
-        let shouldRestoreOverlay = windowDragState == .leftClickDraggingWindow
-        if shouldRestoreOverlay, MissionControlMonitor.shared.currentState.isActive {
-            logger.debug("Mouse released the dragged window, restoring overlay.")
-            windowDragState = .leftClickUpAfterDraggedWindow
-            recreateOverlay()
-        } else {
-            windowDragState = .none
-        }
-
-        return true
     }
 
     // MARK: - Key Event Handling
@@ -419,7 +372,6 @@ final class OpenMissionControlCore: ObservableObject {
     private var previousWindowFrames: [CGWindowID: CGRect]?
     private(set) var overlayRect: CGRect?
     private(set) var hoveredWindow: [String: Any]?
-    private var windowDragState: WindowDragState = .none
 
     @Published private(set) var isOverlayShown: Bool = false
     @Published private(set) var isOverlayHovered: Bool = false
@@ -707,7 +659,6 @@ final class OpenMissionControlCore: ObservableObject {
 
         windowFetchTimer?.invalidate()
         windowFetchTimer = nil
-        windowDragState = .none
         InputEventMonitor.shared.stop()
     }
 

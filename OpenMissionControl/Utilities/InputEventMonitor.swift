@@ -18,8 +18,6 @@ class InputEventMonitor {
     // MARK: - Types
 
     typealias ClickHandler = (_ location: CGPoint, _ buttonCode: CGMouseButton) -> Bool
-    typealias DragHandler = (_ location: CGPoint, _ buttonCode: CGMouseButton) -> Void
-    typealias MouseUpHandler = (_ location: CGPoint, _ buttonCode: CGMouseButton) -> Bool
     typealias MoveHandler = (_ location: CGPoint) -> Void
     typealias KeyHandler = (_ flags: CGEventFlags, _ keyCode: CGKeyCode) -> Bool
 
@@ -34,8 +32,6 @@ class InputEventMonitor {
     )
 
     private var clickHandler: ClickHandler?
-    private var dragHandler: DragHandler?
-    private var mouseUpHandler: MouseUpHandler?
     private var moveHandler: MoveHandler?
     private var keyHandler: KeyHandler?
     private(set) var isMonitoring: Bool = false
@@ -54,14 +50,6 @@ class InputEventMonitor {
 
     func setClickHandler(_ handler: @escaping ClickHandler) {
         clickHandler = handler
-    }
-
-    func setDragHandler(_ handler: @escaping DragHandler) {
-        dragHandler = handler
-    }
-
-    func setMouseUpHandler(_ handler: @escaping MouseUpHandler) {
-        mouseUpHandler = handler
     }
 
     func setMoveHandler(_ handler: @escaping MoveHandler) {
@@ -100,8 +88,6 @@ class InputEventMonitor {
     private func startInputMonitoring() {
         let eventMask =
             (1 << CGEventType.leftMouseDown.rawValue)
-            | (1 << CGEventType.leftMouseDragged.rawValue)
-            | (1 << CGEventType.leftMouseUp.rawValue)
             | (1 << CGEventType.rightMouseDown.rawValue)
             | (1 << CGEventType.otherMouseDown.rawValue)
             | (1 << CGEventType.keyDown.rawValue)
@@ -181,15 +167,6 @@ class InputEventMonitor {
         return clickHandler?(location, button) ?? true
     }
 
-    fileprivate func handleDrag(at location: CGPoint, with button: CGMouseButton) {
-        dragHandler?(location, button)
-    }
-
-    @discardableResult
-    fileprivate func handleMouseUp(at location: CGPoint, with button: CGMouseButton) -> Bool {
-        return mouseUpHandler?(location, button) ?? true
-    }
-
     private func handleMove(to location: CGPoint, timestamp: TimeInterval) {
         let minimumInterval = max(0, mouseUpdateDuration)
         guard
@@ -232,14 +209,6 @@ private func inputEventMonitorCallback(
     if type == .leftMouseDown {
         let location = event.location
         let passDown = InputEventMonitor.shared.handleClick(at: location, with: .left)
-        if !passDown {
-            return nil
-        }
-    } else if type == .leftMouseDragged {
-        InputEventMonitor.shared.handleDrag(at: event.location, with: .left)
-    } else if type == .leftMouseUp {
-        let location = event.location
-        let passDown = InputEventMonitor.shared.handleMouseUp(at: location, with: .left)
         if !passDown {
             return nil
         }
