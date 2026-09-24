@@ -7,7 +7,7 @@
 
 import AppKit
 
-let bundleIdentifier = Bundle.main.bundleIdentifier ?? "dev.travisxu.OpenMissionControl"
+let bundleIdentifier = "dev.travisxu.OpenMissionControl"
 let runningApps = NSRunningApplication.runningApplications(withBundleIdentifier: bundleIdentifier)
 let currentPID = ProcessInfo.processInfo.processIdentifier
 let existingApps = runningApps.filter { $0.processIdentifier != currentPID }
