@@ -19,33 +19,24 @@ import os
 private typealias CGSConnectionID = UInt32
 private typealias CGSConnectionNotifyProc =
     @convention(c) (
-        _ event: UInt32,
-        _ data: UnsafeMutableRawPointer?,
-        _ dataLength: Int,
-        _ context: UnsafeMutableRawPointer?,
-        _ connection: CGSConnectionID
+        _ event: UInt32, _ data: UnsafeMutableRawPointer?, _ dataLength: Int,
+        _ context: UnsafeMutableRawPointer?, _ connection: CGSConnectionID
     ) -> Void
 private typealias SLSRegisterConnectionNotifyProcFunction =
     @convention(c) (
-        _ connection: CGSConnectionID,
-        _ callback: CGSConnectionNotifyProc,
-        _ event: UInt32,
+        _ connection: CGSConnectionID, _ callback: CGSConnectionNotifyProc, _ event: UInt32,
         _ context: UnsafeMutableRawPointer?
     ) -> CGError
 private typealias SLSRequestNotificationsForWindowsFunction =
     @convention(c) (
-        _ connection: CGSConnectionID,
-        _ windowList: UnsafeMutablePointer<CGWindowID>,
+        _ connection: CGSConnectionID, _ windowList: UnsafeMutablePointer<CGWindowID>,
         _ windowCount: Int32
     ) -> CGError
 
-@_silgen_name("CGSMainConnectionID")
-private func CGSMainConnectionID() -> CGSConnectionID
+@_silgen_name("CGSMainConnectionID") private func CGSMainConnectionID() -> CGSConnectionID
 
 private let skyLightHandle = dlopen(
-    "/System/Library/PrivateFrameworks/SkyLight.framework/SkyLight",
-    RTLD_LAZY | RTLD_LOCAL
-)
+    "/System/Library/PrivateFrameworks/SkyLight.framework/SkyLight", RTLD_LAZY | RTLD_LOCAL)
 
 private func skyLightSymbol<T>(_ name: String, as _: T.Type) -> T? {
     guard let skyLightHandle, let symbol = dlsym(skyLightHandle, name) else { return nil }
@@ -58,9 +49,7 @@ enum MissionControlState: String, CaseIterable {
     case showDesktop = "AXExposeShowDesktop"
     case inactive = "AXExposeExit"
 
-    var isActive: Bool {
-        self != .inactive
-    }
+    var isActive: Bool { self != .inactive }
 }
 
 class MissionControlMonitor {
@@ -73,9 +62,7 @@ class MissionControlMonitor {
     // MARK: - Properties
 
     private let logger = Logger(
-        subsystem: "dev.travisxu.OpenMissionControl",
-        category: "MissionControlMonitor"
-    )
+        subsystem: "dev.travisxu.OpenMissionControl", category: "MissionControlMonitor")
 
     private var handler: StateHandler?
     private(set) var isMonitoring: Bool = false
@@ -90,13 +77,9 @@ class MissionControlMonitor {
     private var isOverlayStateAuthoritative = false
     private var subscribedWindowIDs = Set<CGWindowID>()
     private let registerConnectionNotifyProc = skyLightSymbol(
-        "SLSRegisterConnectionNotifyProc",
-        as: SLSRegisterConnectionNotifyProcFunction.self
-    )
+        "SLSRegisterConnectionNotifyProc", as: SLSRegisterConnectionNotifyProcFunction.self)
     private let requestNotificationsForWindows = skyLightSymbol(
-        "SLSRequestNotificationsForWindows",
-        as: SLSRequestNotificationsForWindowsFunction.self
-    )
+        "SLSRequestNotificationsForWindows", as: SLSRequestNotificationsForWindowsFunction.self)
 
     // macOS 27 stopped posting the Dock's AXExpose* notifications. Mission Control's
     // WindowManager overlays remain observable without Screen Recording permission.
@@ -116,9 +99,7 @@ class MissionControlMonitor {
 
     // MARK: - Public Interface
 
-    func setHandler(_ handler: @escaping StateHandler) {
-        self.handler = handler
-    }
+    func setHandler(_ handler: @escaping StateHandler) { self.handler = handler }
 
     func start() {
         guard !isMonitoring else { return }
@@ -203,13 +184,11 @@ class MissionControlMonitor {
             let result = AXObserverAddNotification(
                 observer, element, notification.rawValue as CFString, selfPtr)
             if result != .success {
-                logger.warning(
-                    "Could not observe \(notification.rawValue): \(result.rawValue).")
+                logger.warning("Could not observe \(notification.rawValue): \(result.rawValue).")
             }
         }
 
-        CFRunLoopAddSource(
-            CFRunLoopGetMain(), AXObserverGetRunLoopSource(observer), .commonModes)
+        CFRunLoopAddSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(observer), .commonModes)
         axUiElement = element
         axObserver = observer
         return true
@@ -219,9 +198,7 @@ class MissionControlMonitor {
         if registerWindowServerNotifications() {
             isOverlayEventMonitoring = true
             updateStateFromWindowManagerOverlays()
-            if !subscribedWindowIDs.isEmpty {
-                return true
-            }
+            if !subscribedWindowIDs.isEmpty { return true }
 
             isOverlayEventMonitoring = false
             logger.error("WindowServer window subscription failed, using polling fallback.")
@@ -250,11 +227,7 @@ class MissionControlMonitor {
 
         for event in WindowServerEvent.allCases {
             let result = registerConnectionNotifyProc(
-                connection,
-                windowServerNotificationCallback,
-                event.rawValue,
-                context
-            )
+                connection, windowServerNotificationCallback, event.rawValue, context)
             if result != .success {
                 didRegisterAllEvents = false
                 logger.error(
@@ -278,16 +251,14 @@ class MissionControlMonitor {
             }
             self.overlayUpdateWorkItem = workItem
             DispatchQueue.main.asyncAfter(
-                deadline: .now() + self.overlaySettleDelay,
-                execute: workItem
-            )
+                deadline: .now() + self.overlaySettleDelay, execute: workItem)
         }
     }
 
     private func updateStateFromWindowManagerOverlays() {
         let windowList =
-            CGWindowListCopyWindowInfo(.optionOnScreenOnly, kCGNullWindowID)
-            as? [[String: Any]] ?? []
+            CGWindowListCopyWindowInfo(.optionOnScreenOnly, kCGNullWindowID) as? [[String: Any]]
+            ?? []
 
         updateWindowServerSubscriptions(from: windowList)
 
@@ -296,20 +267,14 @@ class MissionControlMonitor {
         var hasShowDesktopOverlay = false
 
         for window in windowList {
-            guard
-                window[kCGWindowOwnerName as String] as? String == windowManagerProcessName,
+            guard window[kCGWindowOwnerName as String] as? String == windowManagerProcessName,
                 let layer = window[kCGWindowLayer as String] as? Int
             else { continue }
 
-            switch layer {
-            case exposeShieldLevel:
-                hasExposeShield = true
-            case showDesktopOverlayLevel:
-                hasShowDesktopOverlay = true
-            case spacesBarLevel:
-                hasSpacesBar = true
-            default:
-                continue
+            switch layer { case exposeShieldLevel: hasExposeShield = true
+                case showDesktopOverlayLevel: hasShowDesktopOverlay = true
+                case spacesBarLevel: hasSpacesBar = true
+                default: continue
             }
         }
 
@@ -348,11 +313,7 @@ class MissionControlMonitor {
         guard !windowIDs.isEmpty, windowIDs != subscribedWindowIDs else { return }
 
         var list = Array(windowIDs)
-        let result = requestNotificationsForWindows(
-            CGSMainConnectionID(),
-            &list,
-            Int32(list.count)
-        )
+        let result = requestNotificationsForWindows(CGSMainConnectionID(), &list, Int32(list.count))
         if result == .success {
             subscribedWindowIDs = windowIDs
         } else {
@@ -376,8 +337,7 @@ class MissionControlMonitor {
 // MARK: - WindowServer Callback
 
 /// WindowServer invokes this on its notification thread. Keep the callback minimal and transfer state handling to the main queue before touching the monitor.
-private let windowServerNotificationCallback: CGSConnectionNotifyProc = {
-    _, _, _, context, _ in
+private let windowServerNotificationCallback: CGSConnectionNotifyProc = { _, _, _, context, _ in
     guard let context else { return }
 
     let monitor = Unmanaged<MissionControlMonitor>.fromOpaque(context).takeUnretainedValue()
@@ -390,10 +350,7 @@ private let windowServerNotificationCallback: CGSConnectionNotifyProc = {
 /// Recovers the `MissionControlMonitor` instance from `refcon` and
 /// forwards the notification to the monitor's active state source.
 private func axObserverCallback(
-    _: AXObserver,
-    _: AXUIElement,
-    _ notification: CFString,
-    _ refcon: UnsafeMutableRawPointer?
+    _: AXObserver, _: AXUIElement, _ notification: CFString, _ refcon: UnsafeMutableRawPointer?
 ) {
     guard let refcon else { return }
 

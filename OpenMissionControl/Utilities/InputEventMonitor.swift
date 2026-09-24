@@ -27,9 +27,7 @@ class InputEventMonitor {
         SettingsDefaults.mouseUpdateDuration
 
     private let logger = Logger(
-        subsystem: "dev.travisxu.OpenMissionControl",
-        category: "InputEventMonitor"
-    )
+        subsystem: "dev.travisxu.OpenMissionControl", category: "InputEventMonitor")
 
     private var clickHandler: ClickHandler?
     private var moveHandler: MoveHandler?
@@ -48,17 +46,11 @@ class InputEventMonitor {
 
     // MARK: - Public Interface
 
-    func setClickHandler(_ handler: @escaping ClickHandler) {
-        clickHandler = handler
-    }
+    func setClickHandler(_ handler: @escaping ClickHandler) { clickHandler = handler }
 
-    func setMoveHandler(_ handler: @escaping MoveHandler) {
-        moveHandler = handler
-    }
+    func setMoveHandler(_ handler: @escaping MoveHandler) { moveHandler = handler }
 
-    func setKeyHandler(_ handler: @escaping KeyHandler) {
-        keyHandler = handler
-    }
+    func setKeyHandler(_ handler: @escaping KeyHandler) { keyHandler = handler }
 
     func start() {
         guard !isMonitoring else { return }
@@ -87,20 +79,14 @@ class InputEventMonitor {
 
     private func startInputMonitoring() {
         let eventMask =
-            (1 << CGEventType.leftMouseDown.rawValue)
-            | (1 << CGEventType.rightMouseDown.rawValue)
-            | (1 << CGEventType.otherMouseDown.rawValue)
-            | (1 << CGEventType.keyDown.rawValue)
+            (1 << CGEventType.leftMouseDown.rawValue) | (1 << CGEventType.rightMouseDown.rawValue)
+            | (1 << CGEventType.otherMouseDown.rawValue) | (1 << CGEventType.keyDown.rawValue)
 
         guard
             let tap = CGEvent.tapCreate(
-                tap: .cghidEventTap,
-                place: .headInsertEventTap,
-                options: .defaultTap,
-                eventsOfInterest: CGEventMask(eventMask),
-                callback: inputEventMonitorCallback,
-                userInfo: nil
-            )
+                tap: .cghidEventTap, place: .headInsertEventTap, options: .defaultTap,
+                eventsOfInterest: CGEventMask(eventMask), callback: inputEventMonitorCallback,
+                userInfo: nil)
         else {
             logger.error(
                 "Failed to create input event tap. Please grant Accessibility permissions.")
@@ -119,9 +105,7 @@ class InputEventMonitor {
     }
 
     private func stopInputMonitoring() {
-        if let tap = eventTap {
-            CGEvent.tapEnable(tap: tap, enable: false)
-        }
+        if let tap = eventTap { CGEvent.tapEnable(tap: tap, enable: false) }
 
         if let source = runLoopSource {
             CFRunLoopRemoveSource(CFRunLoopGetCurrent(), source, .commonModes)
@@ -162,10 +146,9 @@ class InputEventMonitor {
     // MARK: - Private Helpers
 
     /// Returns `true` if the event should be passed down the event chain, `false` to swallow it.
-    @discardableResult
-    fileprivate func handleClick(at location: CGPoint, with button: CGMouseButton) -> Bool {
-        return clickHandler?(location, button) ?? true
-    }
+    @discardableResult fileprivate func handleClick(
+        at location: CGPoint, with button: CGMouseButton
+    ) -> Bool { return clickHandler?(location, button) ?? true }
 
     private func handleMove(to location: CGPoint, timestamp: TimeInterval) {
         let minimumInterval = max(0, mouseUpdateDuration)
@@ -178,63 +161,47 @@ class InputEventMonitor {
         moveHandler?(location)
     }
 
-    @discardableResult
-    fileprivate func handleKey(flags: CGEventFlags, keyCode: CGKeyCode) -> Bool {
+    @discardableResult fileprivate func handleKey(flags: CGEventFlags, keyCode: CGKeyCode) -> Bool {
         return keyHandler?(flags, keyCode) ?? true
     }
 
     // MARK: - Lifecycle
 
-    deinit {
-        stop()
-    }
+    deinit { stop() }
 }
 
 // MARK: - C Callback for Input Events
 
 private func inputEventMonitorCallback(
-    proxy _: CGEventTapProxy,
-    type: CGEventType,
-    event: CGEvent,
-    refcon _: UnsafeMutableRawPointer?
+    proxy _: CGEventTapProxy, type: CGEventType, event: CGEvent, refcon _: UnsafeMutableRawPointer?
 ) -> Unmanaged<CGEvent>? {
     // Re-enable tap if it was disabled by timeout or user input
     if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
-        if let tap = InputEventMonitor.shared.eventTap {
-            CGEvent.tapEnable(tap: tap, enable: true)
-        }
+        if let tap = InputEventMonitor.shared.eventTap { CGEvent.tapEnable(tap: tap, enable: true) }
         return Unmanaged.passRetained(event)
     }
 
     if type == .leftMouseDown {
         let location = event.location
         let passDown = InputEventMonitor.shared.handleClick(at: location, with: .left)
-        if !passDown {
-            return nil
-        }
+        if !passDown { return nil }
     } else if type == .rightMouseDown {
         let location = event.location
         let passDown = InputEventMonitor.shared.handleClick(at: location, with: .right)
-        if !passDown {
-            return nil
-        }
+        if !passDown { return nil }
     } else if type == .otherMouseDown {
         let location = event.location
         if let button = CGMouseButton(
             rawValue: UInt32(event.getIntegerValueField(.mouseEventButtonNumber)))
         {
             let passDown = InputEventMonitor.shared.handleClick(at: location, with: button)
-            if !passDown {
-                return nil
-            }
+            if !passDown { return nil }
         }
     } else if type == .keyDown {
         let flags = event.flags
         let keyCode = CGKeyCode(event.getIntegerValueField(.keyboardEventKeycode))
         let passDown = InputEventMonitor.shared.handleKey(flags: flags, keyCode: keyCode)
-        if !passDown {
-            return nil
-        }
+        if !passDown { return nil }
     }
 
     return Unmanaged.passRetained(event)

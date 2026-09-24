@@ -1,5 +1,9 @@
 {
-    "indentation": {
-        "spaces": 4
-    }
+  "respectsExistingLineBreaks": false,
+  "indentSwitchCaseLabels": true,
+  "multilineTrailingCommaBehavior": "neverUsed",
+  "lineBreakAroundMultilineExpressionChainComponents": true,
+  "indentation": {
+    "spaces": 4
+  }
 }

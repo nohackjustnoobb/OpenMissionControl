@@ -42,9 +42,7 @@ enum SettingsDefaults {
     static let showZoomButton: Bool = true
 
     static var overlayTheme: OverlayTheme {
-        if #available(macOS 26.0, *) {
-            return .liquidGlass
-        }
+        if #available(macOS 26.0, *) { return .liquidGlass }
 
         return .classic
     }

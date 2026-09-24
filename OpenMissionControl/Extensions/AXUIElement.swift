@@ -6,21 +6,19 @@ import ApplicationServices
 
 /// returns the CGWindowID of the provided AXUIElement
 /// * macOS 10.10+
-@_silgen_name("_AXUIElementGetWindow") @discardableResult
-func _AXUIElementGetWindow(_ axUiElement: AXUIElement, _ wid: inout CGWindowID) -> AXError
+@_silgen_name("_AXUIElementGetWindow") @discardableResult func _AXUIElementGetWindow(
+    _ axUiElement: AXUIElement, _ wid: inout CGWindowID
+) -> AXError
 
-enum AxError: Error {
-    case runtimeError
-}
+enum AxError: Error { case runtimeError }
 
 extension AXUIElement {
     func axCallWhichCanThrow<T>(_ result: AXError, _ successValue: inout T) throws -> T? {
-        switch result {
-        case .success: return successValue
-        // .cannotComplete can happen if the app is unresponsive; we throw in that case to retry until the call succeeds
-        case .cannotComplete: throw AxError.runtimeError
-        // for other errors it's pointless to retry
-        default: return nil
+        switch result { case .success: return successValue
+            // .cannotComplete can happen if the app is unresponsive; we throw in that case to retry until the call succeeds
+            case .cannotComplete: throw AxError.runtimeError
+            // for other errors it's pointless to retry
+            default: return nil
         }
     }
 

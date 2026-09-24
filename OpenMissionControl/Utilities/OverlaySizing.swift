@@ -13,9 +13,7 @@ struct OverlaySizing {
 
     let scale: CGFloat
 
-    init(scale: Double) {
-        self.scale = CGFloat(scale)
-    }
+    init(scale: Double) { self.scale = CGFloat(scale) }
 
     var buttonSize: CGFloat { 24 * scale }
     var spacing: CGFloat { 8 * scale }
@@ -28,8 +26,7 @@ struct OverlaySizing {
     var height: CGFloat { buttonSize + 2 * verticalPadding }
 
     func width(buttonCount: Int) -> CGFloat {
-        2 * horizontalPadding
-            + CGFloat(buttonCount) * buttonSize
-            + CGFloat(max(0, buttonCount - 1)) * spacing
+        2 * horizontalPadding + CGFloat(buttonCount) * buttonSize + CGFloat(max(0, buttonCount - 1))
+            * spacing
     }
 }

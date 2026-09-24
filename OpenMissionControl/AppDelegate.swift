@@ -8,8 +8,7 @@
 import AppKit
 import Foundation
 
-@MainActor
-class AppDelegate: NSObject, NSApplicationDelegate {
+@MainActor class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem?
     private var userDefaultsObserver: NSObjectProtocol?
     private let openSettingsOnLaunch: Bool
@@ -28,9 +27,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         observeUserDefaults()
         setupStatusItem()
 
-        if openSettingsOnLaunch {
-            SettingsViewManager.shared.showSettings()
-        }
+        if openSettingsOnLaunch { SettingsViewManager.shared.showSettings() }
     }
 
     func applicationWillTerminate(_: Notification) {
@@ -80,28 +77,18 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func observeUserDefaults() {
         userDefaultsObserver = NotificationCenter.default.addObserver(
-            forName: UserDefaults.didChangeNotification,
-            object: UserDefaults.standard,
-            queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                self?.updateStatusItemVisibility()
-            }
-        }
+            forName: UserDefaults.didChangeNotification, object: UserDefaults.standard, queue: .main
+        ) { [weak self] _ in Task { @MainActor [weak self] in self?.updateStatusItemVisibility() } }
     }
 
     private func updateStatusItemVisibility() {
-        let showMenuBarIcon = UserDefaults.standard.object(
-            forKey: SettingsDefaults.Key.showMenuBarIcon
-        ) as? Bool ?? SettingsDefaults.showMenuBarIcon
+        let showMenuBarIcon =
+            UserDefaults.standard.object(forKey: SettingsDefaults.Key.showMenuBarIcon) as? Bool
+            ?? SettingsDefaults.showMenuBarIcon
         statusItem?.isVisible = showMenuBarIcon
     }
 
-    @objc private func openSettings() {
-        SettingsViewManager.shared.showSettings()
-    }
+    @objc private func openSettings() { SettingsViewManager.shared.showSettings() }
 
-    @objc private func quitApp() {
-        NSApplication.shared.terminate(nil)
-    }
+    @objc private func quitApp() { NSApplication.shared.terminate(nil) }
 }

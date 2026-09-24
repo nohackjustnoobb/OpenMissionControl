@@ -46,19 +46,14 @@ enum LaunchAtLoginManager {
         Bundle.main.bundleIdentifier ?? "dev.travisxu.OpenMissionControl"
     }
 
-    private static var executablePath: String {
-        Bundle.main.executablePath ?? ""
-    }
+    private static var executablePath: String { Bundle.main.executablePath ?? "" }
 
     private static var launchAgentsURL: URL {
-        FileManager.default
-            .homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/LaunchAgents")
+        FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(
+            "Library/LaunchAgents")
     }
 
-    private static var plistURL: URL {
-        launchAgentsURL.appendingPathComponent("\(bundleID).plist")
-    }
+    private static var plistURL: URL { launchAgentsURL.appendingPathComponent("\(bundleID).plist") }
 
     private static func buildPlist() -> String {
         """
@@ -81,8 +76,7 @@ enum LaunchAtLoginManager {
         """
     }
 
-    @discardableResult
-    private static func launchctl(_ args: String...) throws -> String {
+    @discardableResult private static func launchctl(_ args: String...) throws -> String {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/launchctl")
         process.arguments = args
