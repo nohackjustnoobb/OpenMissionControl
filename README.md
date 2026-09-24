@@ -43,8 +43,16 @@ sudo xattr -rd com.apple.quarantine /Applications/Open\ Mission\ Control.app
 
 ### First-Time Setup
 
-1. Open the app and grant **Accessibility** permissions when prompted in System Settings.
+1. Open the app and grant permission under **Device Control and Data Access** on macOS 27, or **Accessibility** on earlier macOS versions, when prompted in System Settings.
 2. _Note: Sometimes an app restart is needed for it to function properly._
+
+### Developer Note
+
+This repository includes a pre-commit hook that formats staged Swift files and increments the Xcode build number. Enable it after cloning with:
+
+```bash
+git config core.hooksPath .githooks
+```
 
 ## Credits
 

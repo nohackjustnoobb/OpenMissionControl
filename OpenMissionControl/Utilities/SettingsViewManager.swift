@@ -19,24 +19,19 @@ class SettingsViewManager: NSObject, ObservableObject {
             let settingsView = SettingsView()
             let hostingController = NSHostingController(rootView: settingsView)
 
-            let fittingSize = hostingController.view.fittingSize
             let window = NSWindow(
-                contentRect: NSRect(origin: .zero, size: fittingSize),
-                styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
-                backing: .buffered,
-                defer: false
-            )
+                contentRect: NSRect(origin: .zero, size: NSSize(width: 560, height: 600)),
+                styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered,
+                defer: false)
 
-            window.minSize = NSSize(width: fittingSize.width, height: 600)
+            window.minSize = NSSize(width: 520, height: 560)
 
             window.contentViewController = hostingController
             window.isReleasedWhenClosed = true
             window.delegate = self
-            window.titlebarAppearsTransparent = true
             window.title =
                 Bundle.main.infoDictionary?["CFBundleDisplayName"] as? String
                 ?? "Open Mission Control"
-            window.toolbar = NSToolbar()
 
             settingsWindowController = NSWindowController(window: window)
         }
@@ -49,7 +44,5 @@ class SettingsViewManager: NSObject, ObservableObject {
 }
 
 extension SettingsViewManager: NSWindowDelegate {
-    func windowWillClose(_: Notification) {
-        settingsWindowController = nil
-    }
+    func windowWillClose(_: Notification) { settingsWindowController = nil }
 }

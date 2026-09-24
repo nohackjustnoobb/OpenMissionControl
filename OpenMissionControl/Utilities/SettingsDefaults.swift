@@ -11,6 +11,7 @@ enum SettingsDefaults {
     // MARK: - Keys
 
     enum Key {
+        static let showMenuBarIcon = "showMenuBarIcon"
         static let showQuitButton = "showQuitButton"
         static let showCloseButton = "showCloseButton"
         static let showMinimizeButton = "showMinimizeButton"
@@ -18,7 +19,6 @@ enum SettingsDefaults {
 
         static let overlayTheme = "overlayTheme"
         static let overlayButtonScale = "overlayButtonScale"
-        static let restoreOverlayAfterDrag = "restoreOverlayAfterDrag"
 
         static let updateDuration = "updateDuration"
         static let mouseUpdateDuration = "mouseUpdateDuration"
@@ -35,16 +35,20 @@ enum SettingsDefaults {
 
     // MARK: - Defaults
 
+    static let showMenuBarIcon: Bool = true
     static let showQuitButton: Bool = false
     static let showCloseButton: Bool = true
     static let showMinimizeButton: Bool = true
     static let showZoomButton: Bool = true
 
-    static let overlayTheme: OverlayTheme = .default
-    static let overlayButtonScale: Double = 1.0
-    static let restoreOverlayAfterDrag: Bool = false
+    static var overlayTheme: OverlayTheme {
+        if #available(macOS 26.0, *) { return .liquidGlass }
 
-    static let updateDuration: Double = 0.25
+        return .classic
+    }
+    static let overlayButtonScale: Double = 1.0
+
+    static let updateDuration: Double = 0.1
     static let mouseUpdateDuration: Double = 0.1
 
     static let shortcutQuit: Bool = false

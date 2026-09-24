@@ -8,18 +8,21 @@
 import SwiftUI
 
 enum OverlayTheme: String, CaseIterable, DisplayNameable {
-    case `default`
+    case classic
     case minimal
     case coloredMinimal
+    case liquidGlass
+
+    static var allCases: [OverlayTheme] {
+        if #available(macOS 26.0, *) { return [.classic, .minimal, .coloredMinimal, .liquidGlass] }
+
+        return [.classic, .minimal, .coloredMinimal]
+    }
 
     var displayName: String {
-        switch self {
-        case .default:
-            return "Default"
-        case .minimal:
-            return "Minimal"
-        case .coloredMinimal:
-            return "Colored Minimal"
+        switch self { case .classic: return "Classic" case .minimal: return "Minimal"
+            case .coloredMinimal: return "Colored Minimal"
+            case .liquidGlass: return "Liquid Glass"
         }
     }
 }
@@ -35,22 +38,22 @@ struct OverlayView: View {
         let sizing = OverlaySizing(scale: overlayButtonScale)
 
         Group {
-            switch currentTheme {
-            case .default:
-                DefaultOverlayView(sizing: sizing)
-            case .minimal:
+            switch currentTheme { case .classic: ClassicOverlayView(sizing: sizing) case .minimal:
                 MinimalOverlayView(sizing: sizing)
-            case .coloredMinimal:
-                ColoredMinimalOverlayView(sizing: sizing)
+                case .coloredMinimal: ColoredMinimalOverlayView(sizing: sizing)
+                case .liquidGlass:
+                    if #available(macOS 26.0, *) {
+                        LiquidGlassOverlayView(sizing: sizing)
+                    } else {
+                        ClassicOverlayView(sizing: sizing)
+                    }
             }
         }
         .environment(\.isPreview, isPreview)
     }
 }
 
-private struct IsPreviewKey: EnvironmentKey {
-    static let defaultValue: Bool = false
-}
+private struct IsPreviewKey: EnvironmentKey { static let defaultValue: Bool = false }
 
 extension EnvironmentValues {
     var isPreview: Bool {

@@ -8,9 +8,15 @@
 import AppKit
 import Foundation
 
-@MainActor
-class AppDelegate: NSObject, NSApplicationDelegate {
+@MainActor class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem?
+    private var userDefaultsObserver: NSObjectProtocol?
+    private let openSettingsOnLaunch: Bool
+
+    init(openSettingsOnLaunch: Bool = false) {
+        self.openSettingsOnLaunch = openSettingsOnLaunch
+        super.init()
+    }
 
     func applicationDidFinishLaunching(_: Notification) {
         let options =
@@ -18,15 +24,22 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         _ = AXIsProcessTrustedWithOptions(options)
 
         OpenMissionControlCore.shared.start()
+        observeUserDefaults()
         setupStatusItem()
+
+        if openSettingsOnLaunch { SettingsViewManager.shared.showSettings() }
     }
 
     func applicationWillTerminate(_: Notification) {
+        if let userDefaultsObserver {
+            NotificationCenter.default.removeObserver(userDefaultsObserver)
+        }
         OpenMissionControlCore.shared.stop()
     }
 
     private func setupStatusItem() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        updateStatusItemVisibility()
 
         let appName =
             Bundle.main.infoDictionary?["CFBundleDisplayName"] as? String ?? "Open Mission Control"
@@ -62,11 +75,20 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem?.menu = menu
     }
 
-    @objc private func openSettings() {
-        SettingsViewManager.shared.showSettings()
+    private func observeUserDefaults() {
+        userDefaultsObserver = NotificationCenter.default.addObserver(
+            forName: UserDefaults.didChangeNotification, object: UserDefaults.standard, queue: .main
+        ) { [weak self] _ in Task { @MainActor [weak self] in self?.updateStatusItemVisibility() } }
     }
 
-    @objc private func quitApp() {
-        NSApplication.shared.terminate(nil)
+    private func updateStatusItemVisibility() {
+        let showMenuBarIcon =
+            UserDefaults.standard.object(forKey: SettingsDefaults.Key.showMenuBarIcon) as? Bool
+            ?? SettingsDefaults.showMenuBarIcon
+        statusItem?.isVisible = showMenuBarIcon
     }
+
+    @objc private func openSettings() { SettingsViewManager.shared.showSettings() }
+
+    @objc private func quitApp() { NSApplication.shared.terminate(nil) }
 }

@@ -7,17 +7,30 @@
 
 import AppKit
 
-let bundleIdentifier = Bundle.main.bundleIdentifier ?? "dev.travisxu.OpenMissionControl"
+let bundleIdentifier = "dev.travisxu.OpenMissionControl"
 let runningApps = NSRunningApplication.runningApplications(withBundleIdentifier: bundleIdentifier)
 let currentPID = ProcessInfo.processInfo.processIdentifier
+let existingApps = runningApps.filter { $0.processIdentifier != currentPID }
 
-if let existingApp = runningApps.first(where: { $0.processIdentifier != currentPID }) {
-    existingApp.activate(options: [.activateIgnoringOtherApps])
-    exit(0)
+func waitForTermination(of applications: [NSRunningApplication], timeout: TimeInterval) {
+    let deadline = Date().addingTimeInterval(timeout)
+
+    while applications.contains(where: { !$0.isTerminated }), Date() < deadline {
+        Thread.sleep(forTimeInterval: 0.05)
+    }
+}
+
+if !existingApps.isEmpty {
+    existingApps.forEach { $0.terminate() }
+    waitForTermination(of: existingApps, timeout: 1.5)
+
+    let remainingApps = existingApps.filter { !$0.isTerminated }
+    remainingApps.forEach { $0.forceTerminate() }
+    waitForTermination(of: remainingApps, timeout: 0.5)
 }
 
 MainActor.assumeIsolated {
-    let appDelegate = AppDelegate()
+    let appDelegate = AppDelegate(openSettingsOnLaunch: !existingApps.isEmpty)
     NSApplication.shared.delegate = appDelegate
 }
 
