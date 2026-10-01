@@ -220,6 +220,8 @@ struct SettingsView: View {
         SettingsDefaults.rightClickAction
     @AppStorage(SettingsDefaults.Key.middleClickAction) private var middleClickAction:
         WindowAction = SettingsDefaults.middleClickAction
+    @AppStorage(SettingsDefaults.Key.acceptRemoteInput) private var acceptRemoteInput: Bool =
+        SettingsDefaults.acceptRemoteInput
 
     @State private var launchAtLogin: Bool = LaunchAtLoginManager.isEnabled
     @State private var selectedTab: SettingsTab = .general
@@ -273,6 +275,19 @@ struct SettingsView: View {
                                     logger.error("Failed to update login item: \(error)")
                                 }
                             }
+
+                        SettingsDivider()
+
+                        SettingToggleRow(
+                            icon: "display.2",
+                            title: "Accept Remote Input",
+                            subtitle: "Allows remote tools (Screen Sharing, VNC, Jump Desktop) to trigger controls.",
+                            isOn: $acceptRemoteInput
+                        )
+                        .onChange(of: acceptRemoteInput) { _ in
+                            InputEventMonitor.shared.stop()
+                            InputEventMonitor.shared.start()
+                        }
 
                         SettingsDivider()
                         durationRow(

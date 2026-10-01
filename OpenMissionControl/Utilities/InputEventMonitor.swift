@@ -17,7 +17,7 @@ class InputEventMonitor {
 
     // MARK: - Types
 
-    typealias ClickHandler = (_ location: CGPoint, _ buttonCode: CGMouseButton) -> Bool
+    typealias ClickHandler = (_ location: CGPoint, _ buttonCode: CGMouseButton, _ isDown: Bool) -> Bool
     typealias MoveHandler = (_ location: CGPoint) -> Void
     typealias KeyHandler = (_ flags: CGEventFlags, _ keyCode: CGKeyCode) -> Bool
 
@@ -25,6 +25,8 @@ class InputEventMonitor {
 
     @AppStorage(SettingsDefaults.Key.mouseUpdateDuration) private var mouseUpdateDuration: Double =
         SettingsDefaults.mouseUpdateDuration
+    @AppStorage(SettingsDefaults.Key.acceptRemoteInput) private var acceptRemoteInput: Bool =
+        SettingsDefaults.acceptRemoteInput
 
     private let logger = Logger(
         subsystem: "dev.travisxu.OpenMissionControl", category: "InputEventMonitor")
@@ -78,16 +80,43 @@ class InputEventMonitor {
     // MARK: - Private: Input Monitoring
 
     private func startInputMonitoring() {
-        let eventMask =
-            (1 << CGEventType.leftMouseDown.rawValue) | (1 << CGEventType.rightMouseDown.rawValue)
-            | (1 << CGEventType.otherMouseDown.rawValue) | (1 << CGEventType.keyDown.rawValue)
+        let eventMask: Int
+        if acceptRemoteInput {
+            eventMask =
+                (1 << CGEventType.leftMouseDown.rawValue) | (1 << CGEventType.leftMouseUp.rawValue)
+                | (1 << CGEventType.rightMouseDown.rawValue) | (1 << CGEventType.rightMouseUp.rawValue)
+                | (1 << CGEventType.otherMouseDown.rawValue) | (1 << CGEventType.otherMouseUp.rawValue)
+                | (1 << CGEventType.keyDown.rawValue)
+        } else {
+            eventMask =
+                (1 << CGEventType.leftMouseDown.rawValue) | (1 << CGEventType.rightMouseDown.rawValue)
+                | (1 << CGEventType.otherMouseDown.rawValue) | (1 << CGEventType.keyDown.rawValue)
+        }
 
-        guard
-            let tap = CGEvent.tapCreate(
+        var tap: CFMachPort?
+
+        if acceptRemoteInput {
+            tap = CGEvent.tapCreate(
+                tap: .cgAnnotatedSessionEventTap, place: .headInsertEventTap, options: .defaultTap,
+                eventsOfInterest: CGEventMask(eventMask), callback: inputEventMonitorCallback,
+                userInfo: nil)
+
+            if tap == nil {
+                tap = CGEvent.tapCreate(
+                    tap: .cgSessionEventTap, place: .headInsertEventTap, options: .defaultTap,
+                    eventsOfInterest: CGEventMask(eventMask), callback: inputEventMonitorCallback,
+                    userInfo: nil)
+            }
+        }
+
+        if tap == nil {
+            tap = CGEvent.tapCreate(
                 tap: .cghidEventTap, place: .headInsertEventTap, options: .defaultTap,
                 eventsOfInterest: CGEventMask(eventMask), callback: inputEventMonitorCallback,
                 userInfo: nil)
-        else {
+        }
+
+        guard let tap else {
             logger.error(
                 "Failed to create input event tap. Please grant Accessibility permissions.")
             return
@@ -147,8 +176,8 @@ class InputEventMonitor {
 
     /// Returns `true` if the event should be passed down the event chain, `false` to swallow it.
     @discardableResult fileprivate func handleClick(
-        at location: CGPoint, with button: CGMouseButton
-    ) -> Bool { return clickHandler?(location, button) ?? true }
+        at location: CGPoint, with button: CGMouseButton, isDown: Bool = true
+    ) -> Bool { return clickHandler?(location, button, isDown) ?? true }
 
     private func handleMove(to location: CGPoint, timestamp: TimeInterval) {
         let minimumInterval = max(0, mouseUpdateDuration)
@@ -183,18 +212,34 @@ private func inputEventMonitorCallback(
 
     if type == .leftMouseDown {
         let location = event.location
-        let passDown = InputEventMonitor.shared.handleClick(at: location, with: .left)
+        let passDown = InputEventMonitor.shared.handleClick(at: location, with: .left, isDown: true)
+        if !passDown { return nil }
+    } else if type == .leftMouseUp {
+        let location = event.location
+        let passDown = InputEventMonitor.shared.handleClick(at: location, with: .left, isDown: false)
         if !passDown { return nil }
     } else if type == .rightMouseDown {
         let location = event.location
-        let passDown = InputEventMonitor.shared.handleClick(at: location, with: .right)
+        let passDown = InputEventMonitor.shared.handleClick(at: location, with: .right, isDown: true)
+        if !passDown { return nil }
+    } else if type == .rightMouseUp {
+        let location = event.location
+        let passDown = InputEventMonitor.shared.handleClick(at: location, with: .right, isDown: false)
         if !passDown { return nil }
     } else if type == .otherMouseDown {
         let location = event.location
         if let button = CGMouseButton(
             rawValue: UInt32(event.getIntegerValueField(.mouseEventButtonNumber)))
         {
-            let passDown = InputEventMonitor.shared.handleClick(at: location, with: button)
+            let passDown = InputEventMonitor.shared.handleClick(at: location, with: button, isDown: true)
+            if !passDown { return nil }
+        }
+    } else if type == .otherMouseUp {
+        let location = event.location
+        if let button = CGMouseButton(
+            rawValue: UInt32(event.getIntegerValueField(.mouseEventButtonNumber)))
+        {
+            let passDown = InputEventMonitor.shared.handleClick(at: location, with: button, isDown: false)
             if !passDown { return nil }
         }
     } else if type == .keyDown {

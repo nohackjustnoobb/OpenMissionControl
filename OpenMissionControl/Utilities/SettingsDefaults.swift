@@ -31,6 +31,7 @@ enum SettingsDefaults {
 
         static let rightClickAction = "rightClickAction"
         static let middleClickAction = "middleClickAction"
+        static let acceptRemoteInput = "acceptRemoteInput"
     }
 
     // MARK: - Defaults
@@ -59,4 +60,5 @@ enum SettingsDefaults {
 
     static let rightClickAction: WindowAction = .none
     static let middleClickAction: WindowAction = .none
+    static let acceptRemoteInput: Bool = false
 }

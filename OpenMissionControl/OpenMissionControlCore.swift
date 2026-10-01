@@ -76,6 +76,15 @@ final class OpenMissionControlCore: ObservableObject {
         SettingsDefaults.rightClickAction
     @AppStorage(SettingsDefaults.Key.middleClickAction) private var middleClickAction:
         WindowAction = SettingsDefaults.middleClickAction
+    @AppStorage(SettingsDefaults.Key.acceptRemoteInput) private var acceptRemoteInput: Bool =
+        SettingsDefaults.acceptRemoteInput
+
+    private var cursorPollTimer: Timer?
+    private var wasOverlayMouseDown = false
+    private var wasRightMouseDownSwallowed = false
+    private var wasMiddleMouseDownSwallowed = false
+    private var lastActionTimestamp: TimeInterval = 0
+    private var lastActionKey: String = ""
 
     // MARK: - Lifecycle
 
@@ -109,12 +118,12 @@ final class OpenMissionControlCore: ObservableObject {
         MissionControlMonitor.shared.start()
 
         // Configure input event monitor
-        InputEventMonitor.shared.setClickHandler { [weak self] location, button in
+        InputEventMonitor.shared.setClickHandler { [weak self] location, button, isDown in
             guard let self = self else { return true }
 
             self.logger.debug(
-                "Mouse clicked at: \(location.x), \(location.y) (button: \(button.rawValue))")
-            return self.handleMouseClick(at: location, with: button)
+                "Mouse clicked at: \(location.x), \(location.y) (button: \(button.rawValue), isDown: \(isDown))")
+            return self.handleMouseClick(at: location, with: button, isDown: isDown)
         }
         InputEventMonitor.shared.setMoveHandler { [weak self] location in
             guard let self = self else { return }
@@ -139,6 +148,7 @@ final class OpenMissionControlCore: ObservableObject {
     func stop() {
         axTrustedTimer?.invalidate()
         axTrustedTimer = nil
+        stopCursorPolling()
         MissionControlMonitor.shared.stop()
         InputEventMonitor.shared.stop()
         NSWorkspace.shared.notificationCenter.removeObserver(self)
@@ -159,10 +169,34 @@ final class OpenMissionControlCore: ObservableObject {
         if state.isActive {
             setOverlayWindowExpanded(true)
             showOverlay()
+            if acceptRemoteInput {
+                startCursorPolling()
+            }
         } else {
+            stopCursorPolling()
             hideOverlay()
             setOverlayWindowExpanded(false)
         }
+    }
+
+    private func startCursorPolling() {
+        guard cursorPollTimer == nil else { return }
+        let timer = Timer(timeInterval: 0.03, repeats: true) { [weak self] _ in
+            guard let self = self else { return }
+            guard self.isOverlayShown || MissionControlMonitor.shared.currentState.isActive || self.isMissionControlSurfaceVisible else {
+                return
+            }
+            if let mouseLocation = CGEvent(source: nil)?.location {
+                self.updateOverlay(at: mouseLocation)
+            }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        cursorPollTimer = timer
+    }
+
+    private func stopCursorPolling() {
+        cursorPollTimer?.invalidate()
+        cursorPollTimer = nil
     }
 
     // MARK: - Active Space Change Handling
@@ -178,52 +212,83 @@ final class OpenMissionControlCore: ObservableObject {
     // MARK: - Mouse Event Handling
 
     @discardableResult private func handleMouseClick(
-        at location: CGPoint, with button: CGMouseButton
+        at location: CGPoint, with button: CGMouseButton, isDown: Bool
     ) -> Bool {
-        guard isOverlayShown else { return true }
+        let isMCActive = isOverlayShown || MissionControlMonitor.shared.currentState.isActive || isMissionControlSurfaceVisible
+        guard isMCActive else { return true }
 
         if let rect = overlayRect, rect.contains(location) {
             if button == .left {
-                logger.debug(
-                    "Captured left click inside overlayRect at (\(location.x), \(location.y)).")
-                handleOverlayClick(at: location)
-                return false
+                if isDown {
+                    logger.debug("Captured left click DOWN inside overlayRect at (\(location.x), \(location.y)).")
+                    wasOverlayMouseDown = true
+                    handleOverlayClick(at: location)
+                    return false
+                } else {
+                    logger.debug("Captured left click UP inside overlayRect at (\(location.x), \(location.y)).")
+                    wasOverlayMouseDown = false
+                    return false
+                }
             } else {
-                logger.debug(
-                    "Captured non-left click inside overlayRect at (\(location.x), \(location.y)), skipping."
-                )
                 return true
             }
         }
 
-        if let window = hoveredWindow {
-            switch button { case .left:
-                logger.debug(
-                    "Captured left click on hovered window at (\(location.x), \(location.y)).")
-                hideOverlay(keepInputMonitoring: true)
+        if !isDown && wasOverlayMouseDown {
+            wasOverlayMouseDown = false
+            return false
+        }
+
+        let targetWindow = hoveredWindow ?? windowUnderMouse(at: location)
+
+        if let window = targetWindow {
+            switch button {
+            case .left:
+                if isDown {
+                    logger.debug("Captured left click on window at (\(location.x), \(location.y)).")
+                    hideOverlay(keepInputMonitoring: true)
+                }
                 return true
-                case .right:
-                    logger.debug(
-                        "Captured right click on hovered window at (\(location.x), \(location.y)).")
-                    performWindowAction(
-                        window: window, action: rightClickAction, instigator: .mouse)
-                    return rightClickAction == .none
-                case .center:
-                    logger.debug(
-                        "Captured middle click on hovered window at (\(location.x), \(location.y))."
-                    )
-                    performWindowAction(
-                        window: window, action: middleClickAction, instigator: .mouse)
-                    return middleClickAction == .none
-                default:
-                    logger.debug(
-                        "Captured non-default click (id \(button.rawValue)) on hovered window at (\(location.x), \(location.y)), skipping."
-                    )
+            case .right:
+                if isDown {
+                    logger.debug("Captured right click DOWN on window at (\(location.x), \(location.y)).")
+                    if rightClickAction != .none {
+                        performWindowAction(window: window, action: rightClickAction, instigator: .mouse)
+                        wasRightMouseDownSwallowed = true
+                        return false
+                    }
                     return true
+                } else {
+                    if wasRightMouseDownSwallowed {
+                        wasRightMouseDownSwallowed = false
+                        return false
+                    }
+                    return true
+                }
+            case .center:
+                if isDown {
+                    logger.debug("Captured middle click DOWN on window at (\(location.x), \(location.y)).")
+                    if middleClickAction != .none {
+                        performWindowAction(window: window, action: middleClickAction, instigator: .mouse)
+                        wasMiddleMouseDownSwallowed = true
+                        return false
+                    }
+                    return true
+                } else {
+                    if wasMiddleMouseDownSwallowed {
+                        wasMiddleMouseDownSwallowed = false
+                        return false
+                    }
+                    return true
+                }
+            default:
+                return true
             }
         }
 
-        hideOverlay(keepInputMonitoring: true)
+        if isDown && button == .left {
+            hideOverlay(keepInputMonitoring: true)
+        }
         return true
     }
 
@@ -232,7 +297,11 @@ final class OpenMissionControlCore: ObservableObject {
     // MARK: - Key Event Handling
 
     private func handleKeyPress(flags: CGEventFlags, keyCode: CGKeyCode) -> Bool {
-        guard isOverlayShown else { return true }
+        let isMCActive = isOverlayShown || MissionControlMonitor.shared.currentState.isActive || isMissionControlSurfaceVisible
+        guard isMCActive else { return true }
+
+        let mouseLocation = CGEvent(source: nil)?.location ?? .zero
+        let targetWindow = hoveredWindow ?? windowUnderMouse(at: mouseLocation)
 
         let isReturnKey =
             keyCode == KeyboardKey.return.rawValue || keyCode == KeyboardKey.keypadEnter.rawValue
@@ -241,39 +310,56 @@ final class OpenMissionControlCore: ObservableObject {
             || flags.contains(.maskAlternate) || flags.contains(.maskShift)
 
         if shortcutActivateWindow, isReturnKey, !hasActionModifier {
-            if let window = hoveredWindow { activateHoveredWindow(window) }
+            if let window = targetWindow { activateHoveredWindow(window) }
             return false
         }
 
-        guard let window = hoveredWindow else { return true }
+        guard let window = targetWindow else { return true }
 
         // Check for Command key
         guard flags.contains(.maskCommand) else { return true }
 
-        switch KeyboardKey(rawValue: keyCode) { case .q:
+        switch KeyboardKey(rawValue: keyCode) {
+        case .q:
             if shortcutQuit {
                 performWindowAction(window: window, action: .quit, instigator: .keyboard)
                 return false
             }
-            case .w:
-                if shortcutClose {
-                    performWindowAction(window: window, action: .close, instigator: .keyboard)
-                    return false
-                }
-            case .m:
-                if shortcutMinimize {
-                    performWindowAction(window: window, action: .minimize, instigator: .keyboard)
-                    return false
-                }
-            case .f:
-                if shortcutMaximize {
-                    performWindowAction(window: window, action: .zoom, instigator: .keyboard)
-                    return false
-                }
-            default: break
+        case .w:
+            if shortcutClose {
+                performWindowAction(window: window, action: .close, instigator: .keyboard)
+                return false
+            }
+        case .m:
+            if shortcutMinimize {
+                performWindowAction(window: window, action: .minimize, instigator: .keyboard)
+                return false
+            }
+        case .f:
+            if shortcutMaximize {
+                performWindowAction(window: window, action: .zoom, instigator: .keyboard)
+                return false
+            }
+        default: break
         }
 
         return true
+    }
+
+    private func windowUnderMouse(at location: CGPoint) -> [String: Any]? {
+        if windows.isEmpty { fetchWindows() }
+        for windowInfo in windows {
+            guard let boundsDict = windowInfo[kCGWindowBounds as String] as? [String: CGFloat],
+                let x = boundsDict["X"], let y = boundsDict["Y"],
+                let width = boundsDict["Width"], let height = boundsDict["Height"]
+            else { continue }
+
+            let windowFrame = CGRect(x: x, y: y, width: width, height: height)
+            if windowFrame.contains(location) {
+                return windowInfo
+            }
+        }
+        return nil
     }
 
     private func activateHoveredWindow(_ window: [String: Any]) {
@@ -284,15 +370,17 @@ final class OpenMissionControlCore: ObservableObject {
 
         hideOverlay(keepInputMonitoring: true)
 
-        let source = CGEventSource(stateID: .hidSystemState)
+        let tapLocation: CGEventTapLocation = acceptRemoteInput ? .cgSessionEventTap : .cghidEventTap
+        let stateID: CGEventSourceStateID = acceptRemoteInput ? .combinedSessionState : .hidSystemState
+        let source = CGEventSource(stateID: stateID)
         let mouseDown = CGEvent(
             mouseEventSource: source, mouseType: .leftMouseDown, mouseCursorPosition: location,
             mouseButton: .left)
         let mouseUp = CGEvent(
             mouseEventSource: source, mouseType: .leftMouseUp, mouseCursorPosition: location,
             mouseButton: .left)
-        mouseDown?.post(tap: .cghidEventTap)
-        mouseUp?.post(tap: .cghidEventTap)
+        mouseDown?.post(tap: tapLocation)
+        mouseUp?.post(tap: tapLocation)
     }
 
     // MARK: - Window Fetching
@@ -471,24 +559,71 @@ final class OpenMissionControlCore: ObservableObject {
     private func performWindowAction(
         window: [String: Any], action: WindowAction, instigator: Instigator
     ) {
+        let windowID = window[kCGWindowNumber as String] as? CGWindowID ?? 0
+        let currentUptime = ProcessInfo.processInfo.systemUptime
+        let key = "\(windowID)_\(action.rawValue)"
+        if key == lastActionKey && (currentUptime - lastActionTimestamp) < 0.25 {
+            logger.debug("Debouncing duplicate window action for \(key)")
+            return
+        }
+        lastActionKey = key
+        lastActionTimestamp = currentUptime
+
         let windowName = window[kCGWindowName as String] as? String ?? ""
 
-        switch action { case .quit:
+        switch action {
+        case .quit:
             logger.info("\(instigator.displayName) Quit triggered on window: \(windowName)")
             quitApplication(window: window)
-            case .minimize:
-                logger.info("\(instigator.displayName) Minimize triggered on window: \(windowName)")
-                performOSWindowAction(window: window, action: kAXMinimizeButtonAttribute)
-            case .zoom:
-                logger.info("\(instigator.displayName) Maximize triggered on window: \(windowName)")
-                _ = CoreDockSendNotification("com.apple.expose.awake" as CFString, 0)
-                hideOverlay(keepInputMonitoring: true)
-                performOSWindowAction(window: window, action: kAXZoomButtonAttribute)
-            case .close:
-                logger.info("\(instigator.displayName) Close triggered on window: \(windowName)")
-                performOSWindowAction(window: window, action: kAXCloseButtonAttribute)
-            default: break
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
+                self?.refreshOverlayAfterWindowFetch()
+            }
+        case .minimize:
+            logger.info("\(instigator.displayName) Minimize triggered on window: \(windowName)")
+            performOSWindowAction(window: window, action: kAXMinimizeButtonAttribute)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
+                self?.refreshOverlayAfterWindowFetch()
+            }
+        case .zoom:
+            logger.info("\(instigator.displayName) Maximize triggered on window: \(windowName)")
+            _ = CoreDockSendNotification("com.apple.expose.awake" as CFString, 0)
+            hideOverlay(keepInputMonitoring: true)
+            performOSWindowAction(window: window, action: kAXZoomButtonAttribute)
+        case .close:
+            logger.info("\(instigator.displayName) Close triggered on window: \(windowName)")
+            performOSWindowAction(window: window, action: kAXCloseButtonAttribute)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
+                self?.refreshOverlayAfterWindowFetch()
+            }
+        default: break
         }
+    }
+
+    private func findActionElement(in window: AXUIElement, for action: String) -> AXUIElement? {
+        if let direct = try? window.attribute(action, AXUIElement.self) {
+            return direct
+        }
+
+        var subroleName = ""
+        if action == kAXCloseButtonAttribute {
+            subroleName = "AXCloseButton"
+        } else if action == kAXMinimizeButtonAttribute {
+            subroleName = "AXMinimizeButton"
+        } else if action == kAXZoomButtonAttribute {
+            subroleName = "AXFullScreenButton"
+        }
+
+        if !subroleName.isEmpty {
+            if let children: [AXUIElement] = try? window.attribute(kAXChildrenAttribute as String, [AXUIElement].self) {
+                for child in children {
+                    if let subrole: String = try? child.attribute(kAXSubroleAttribute as String, String.self),
+                       subrole == subroleName {
+                        return child
+                    }
+                }
+            }
+        }
+        return nil
     }
 
     private func performOSWindowAction(window: [String: Any], action: String) {
@@ -506,7 +641,7 @@ final class OpenMissionControlCore: ObservableObject {
         for axWindow in windows {
             if let axWindowId = try? axWindow.cgWindowId(), axWindowId == windowID {
                 do {
-                    if let button = try? axWindow.attribute(action, AXUIElement.self) {
+                    if let button = findActionElement(in: axWindow, for: action) {
                         try button.performAction(kAXPressAction)
                         logger.info(
                             "Performed \(action) on window with PID \(pid) and WindowID \(windowID)"
