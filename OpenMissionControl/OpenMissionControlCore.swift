@@ -76,6 +76,8 @@ final class OpenMissionControlCore: ObservableObject {
         SettingsDefaults.rightClickAction
     @AppStorage(SettingsDefaults.Key.middleClickAction) private var middleClickAction:
         WindowAction = SettingsDefaults.middleClickAction
+    private var activeMouseButtons: Set<CGMouseButton> = []
+    private var isMouseEventActive: Bool { !activeMouseButtons.isEmpty }
 
     // MARK: - Lifecycle
 
@@ -87,6 +89,7 @@ final class OpenMissionControlCore: ObservableObject {
         guard !isRunning else { return }
 
         isRunning = true
+        activeMouseButtons.removeAll()
 
         wasAXTrusted = AXIsProcessTrusted()
         axTrustedTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) {
@@ -113,14 +116,18 @@ final class OpenMissionControlCore: ObservableObject {
             guard let self = self else { return true }
 
             self.logger.debug(
-                "Mouse clicked at: \(location.x), \(location.y) (button: \(button.rawValue))")
+                "Mouse released at: \(location.x), \(location.y) (button: \(button.rawValue))")
             return self.handleMouseClick(at: location, with: button)
         }
+        InputEventMonitor.shared.setMouseDownHandler { [weak self] location, button in
+            self?.logger
+                .debug(
+                    "Mouse pressed at: \(location.x), \(location.y) (button: \(button.rawValue))")
+            self?.handleMouseDown(at: location, with: button)
+        }
         InputEventMonitor.shared.setMoveHandler { [weak self] location in
-            guard let self = self else { return }
-
-            self.logger.debug("Mouse moved to: \(location.x), \(location.y)")
-            self.handleMouseMove(to: location)
+            self?.logger.debug("Mouse moved to: \(location.x), \(location.y)")
+            self?.handleMouseMove(to: location)
         }
         InputEventMonitor.shared.setKeyHandler { [weak self] flags, keyCode in
             guard let self = self else { return true }
@@ -156,13 +163,7 @@ final class OpenMissionControlCore: ObservableObject {
     private func handleMissionControlStateChange(_ state: MissionControlState) {
         logger.info("Mission Control state changed: \(state.rawValue)")
 
-        if state.isActive {
-            setOverlayWindowExpanded(true)
-            showOverlay()
-        } else {
-            hideOverlay()
-            setOverlayWindowExpanded(false)
-        }
+        if state.isActive { showOverlay() } else { hideOverlay() }
     }
 
     // MARK: - Active Space Change Handling
@@ -180,6 +181,9 @@ final class OpenMissionControlCore: ObservableObject {
     @discardableResult private func handleMouseClick(
         at location: CGPoint, with button: CGMouseButton
     ) -> Bool {
+        let wasButtonDown = activeMouseButtons.remove(button) != nil
+        guard wasButtonDown else { return true }
+
         guard isOverlayShown else { return true }
 
         if let rect = overlayRect, rect.contains(location) {
@@ -227,7 +231,25 @@ final class OpenMissionControlCore: ObservableObject {
         return true
     }
 
-    private func handleMouseMove(to location: CGPoint) { updateOverlay(at: location) }
+    private func handleMouseMove(to location: CGPoint) {
+        guard !isMouseEventActive else { return }
+
+        updateOverlay(at: location)
+    }
+
+    private func handleMouseDown(at location: CGPoint, with button: CGMouseButton) {
+        activeMouseButtons.insert(button)
+
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.isMouseEventActive else { return }
+            guard isOverlayShown else { return }
+            guard overlayRect?.contains(location) != true else { return }
+
+            // Keep the hit-test state until mouse-up, but hide the visual overlay while the button is held so a drag cannot cause it to reappear.
+            overlayContentView?.isHidden = true
+            isOverlayHovered = false
+        }
+    }
 
     // MARK: - Key Event Handling
 
@@ -349,12 +371,12 @@ final class OpenMissionControlCore: ObservableObject {
     @Published private(set) var isOverlayHovered: Bool = false
 
     func updateOverlay(at mouseLocation: CGPoint) {
-        guard isOverlayShown else { return }
+        guard isOverlayShown, !isMouseEventActive else { return }
 
         DispatchQueue.main.async { [self] in
             // A move or timer refresh may already be queued when a click hides the
             // overlay. Do not let that stale update make the content visible again.
-            guard isOverlayShown else { return }
+            guard isOverlayShown, !isMouseEventActive else { return }
 
             if let rect = overlayRect {
                 let isHovering = hoveredWindow != nil && rect.contains(mouseLocation)
@@ -399,8 +421,8 @@ final class OpenMissionControlCore: ObservableObject {
                     let newFrame = NSRect(
                         x: x + 8, y: convertedY - 8, width: overlayWidth, height: sizing.height)
                     if let overlayWindow, let overlayContentView {
-                        overlayContentView.frame = newFrame.offsetBy(
-                            dx: -overlayWindow.frame.minX, dy: -overlayWindow.frame.minY)
+                        overlayWindow.setFrame(newFrame, display: false, animate: false)
+                        overlayContentView.frame = overlayWindow.contentView?.bounds ?? .zero
                         overlayContentView.isHidden = false
                         overlayContentView.needsDisplay = true
                     }
@@ -602,6 +624,7 @@ final class OpenMissionControlCore: ObservableObject {
 
         if keepInputMonitoring { return }
 
+        activeMouseButtons.removeAll()
         windowFetchTimer?.invalidate()
         windowFetchTimer = nil
         InputEventMonitor.shared.stop()
@@ -651,22 +674,6 @@ final class OpenMissionControlCore: ObservableObject {
         // The surface must be ordered before Mission Control starts.
         // Keep it at one pixel while inactive so AppKit does not route desktop-wide mouse movement through its tracking areas.
         window.orderFrontRegardless()
-    }
-
-    private func setOverlayWindowExpanded(_ isExpanded: Bool) {
-        guard let overlayWindow else { return }
-
-        let desktopFrame = NSScreen.screens.reduce(CGRect.null) { frame, screen in
-            frame.union(screen.frame)
-        }
-        guard !desktopFrame.isNull, !desktopFrame.isEmpty else { return }
-
-        let targetFrame =
-            isExpanded
-            ? desktopFrame : CGRect(origin: desktopFrame.origin, size: inactiveOverlayWindowSize)
-        guard overlayWindow.frame != targetFrame else { return }
-
-        overlayWindow.setFrame(targetFrame, display: false)
     }
 
     private func destroyOverlayWindow() {
