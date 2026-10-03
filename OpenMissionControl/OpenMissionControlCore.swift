@@ -399,7 +399,6 @@ final class OpenMissionControlCore: ObservableObject {
                     let screenHeight =
                         NSScreen.screens.first?.frame.height ?? NSScreen.main?.frame.height ?? 0
                     let sizing = OverlaySizing(scale: overlayButtonScale)
-                    let convertedY = screenHeight - y - sizing.height
 
                     let showQuit =
                         UserDefaults.standard.object(forKey: SettingsDefaults.Key.showQuitButton)
@@ -417,9 +416,12 @@ final class OpenMissionControlCore: ObservableObject {
                     let buttonCount = [showQuit, showClose, showMinimize, showZoom].filter { $0 }
                         .count
                     let overlayWidth = sizing.width(buttonCount: buttonCount)
+                    let windowWidth = overlayWidth + 2 * sizing.margin
+                    let windowHeight = sizing.height + 2 * sizing.margin
+                    let convertedY = screenHeight - y - windowHeight
 
                     let newFrame = NSRect(
-                        x: x + 8, y: convertedY - 8, width: overlayWidth, height: sizing.height)
+                        x: x, y: convertedY, width: windowWidth, height: windowHeight)
                     if let overlayWindow, let overlayContentView {
                         overlayWindow.setFrame(newFrame, display: false, animate: false)
                         overlayContentView.frame = overlayWindow.contentView?.bounds ?? .zero
@@ -428,7 +430,8 @@ final class OpenMissionControlCore: ObservableObject {
                     }
 
                     let cgOverlayRect = CGRect(
-                        x: x + 8, y: y + 8, width: overlayWidth, height: sizing.height)
+                        x: x + sizing.margin, y: y + sizing.margin, width: overlayWidth,
+                        height: sizing.height)
                     overlayRect = cgOverlayRect
                     hoveredWindow = windowInfo
                     return

@@ -49,7 +49,8 @@ struct OverlayView: View {
                     }
             }
         }
-        .environment(\.isPreview, isPreview)
+        // Leave room for glass effects and shadows inside the hosting window.
+        .padding(sizing.margin).environment(\.isPreview, isPreview)
     }
 }
 

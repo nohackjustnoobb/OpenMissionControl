@@ -23,24 +23,23 @@ struct ColoredMinimalOverlayView: View {
 
     var body: some View {
         HStack(spacing: sizing.spacing) {
-            if showQuitButton { overlayIcon(color: .purple, icon: "power", iconSize: 10) }
+            if showQuitButton { overlayIcon(color: .purple, icon: .system("power"), iconSize: 11) }
 
-            if showCloseButton { overlayIcon(color: .red, icon: "xmark", iconSize: 12) }
+            if showCloseButton { overlayIcon(color: .red, icon: .system("xmark"), iconSize: 13) }
 
-            if showMinimizeButton { overlayIcon(color: .yellow, icon: "minus", iconSize: 15) }
-
-            if showZoomButton {
-                overlayIcon(
-                    color: .green, icon: "arrow.up.backward.and.arrow.down.forward", iconSize: 12)
+            if showMinimizeButton {
+                overlayIcon(color: .yellow, icon: .system("minus"), iconSize: 13)
             }
+
+            if showZoomButton { overlayIcon(color: .green, icon: .fullscreen, iconSize: 12) }
         }
         .padding(.horizontal, sizing.horizontalPadding).padding(.vertical, sizing.verticalPadding)
         .background(Capsule().fill(Color(NSColor.windowBackgroundColor).opacity(0.95)))
         .overlay(Capsule().stroke(Color.primary.opacity(0.15), lineWidth: sizing.borderWidth))
     }
 
-    private func overlayIcon(color: Color, icon: String, iconSize: CGFloat) -> some View {
-        Image(systemName: icon).font(.system(size: iconSize * sizing.scale, weight: .bold))
-            .foregroundColor(color).frame(width: sizing.buttonSize, height: sizing.buttonSize)
+    private func overlayIcon(color: Color, icon: OverlayIcon, iconSize: CGFloat) -> some View {
+        icon.view(size: iconSize * sizing.scale).foregroundColor(color)
+            .frame(width: sizing.buttonSize, height: sizing.buttonSize)
     }
 }

@@ -15,11 +15,12 @@ struct OverlaySizing {
 
     init(scale: Double) { self.scale = CGFloat(scale) }
 
+    var margin: CGFloat { 8 }
     var buttonSize: CGFloat { 24 * scale }
     var spacing: CGFloat { 8 * scale }
     var horizontalPadding: CGFloat { 10 * scale }
     var verticalPadding: CGFloat { 8 * scale }
-    var borderWidth: CGFloat { 0.5 * scale }
+    var borderWidth: CGFloat { scale }
     var shadowRadius: CGFloat { 3 * scale }
     var shadowYOffset: CGFloat { scale }
     var buttonStride: CGFloat { buttonSize + spacing }

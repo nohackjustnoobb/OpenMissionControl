@@ -72,14 +72,14 @@ struct AccessibilityRow: View {
 // MARK: - Reusable Setting Row
 
 struct SettingToggleRow: View {
-    let icon: String?
+    let icon: OverlayIcon?
     let iconColor: LinearGradient
     let title: String
     let subtitle: String?
     @Binding var isOn: Bool
 
     init(
-        icon: String? = nil, iconColor: LinearGradient? = nil, title: String,
+        icon: OverlayIcon? = nil, iconColor: LinearGradient? = nil, title: String,
         subtitle: String? = nil, isOn: Binding<Bool>
     ) {
         self.icon = icon
@@ -95,8 +95,7 @@ struct SettingToggleRow: View {
                 ZStack {
                     RoundedRectangle(cornerRadius: 7, style: .continuous).fill(iconColor)
                         .frame(width: 28, height: 28)
-                    Image(systemName: icon).font(.system(size: 13, weight: .semibold))
-                        .foregroundColor(.white)
+                    icon.view(size: 13, weight: .semibold).foregroundColor(.white)
                 }
             }
 
@@ -254,7 +253,7 @@ struct SettingsView: View {
                     sectionHeader("General")
                     SettingsCard {
                         SettingToggleRow(
-                            icon: "menubar.rectangle", title: "Show Menu Bar Icon",
+                            icon: .system("menubar.rectangle"), title: "Show Menu Bar Icon",
                             subtitle: "Keep quick access to Settings and Quit.",
                             isOn: $showMenuBarIcon)
 
@@ -304,24 +303,23 @@ struct SettingsView: View {
                         SettingsDivider()
 
                         SettingToggleRow(
-                            icon: "power", iconColor: solidColor(color: .purple),
+                            icon: .system("power"), iconColor: solidColor(color: .purple),
                             title: "Quit Button", isOn: $showQuitButton)
 
                         SettingsDivider()
                         SettingToggleRow(
-                            icon: "xmark", iconColor: solidColor(color: .red),
+                            icon: .system("xmark"), iconColor: solidColor(color: .red),
                             title: "Close Button", isOn: $showCloseButton)
 
                         SettingsDivider()
                         SettingToggleRow(
-                            icon: "minus", iconColor: solidColor(color: .yellow),
+                            icon: .system("minus"), iconColor: solidColor(color: .yellow),
                             title: "Minimize Button", isOn: $showMinimizeButton)
 
                         SettingsDivider()
                         SettingToggleRow(
-                            icon: "arrow.up.backward.and.arrow.down.forward",
-                            iconColor: solidColor(color: .green), title: "Maximize Button",
-                            isOn: $showZoomButton)
+                            icon: .fullscreen, iconColor: solidColor(color: .green),
+                            title: "Maximize Button", isOn: $showZoomButton)
                     }
                 }
 
