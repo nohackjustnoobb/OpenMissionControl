@@ -362,7 +362,6 @@ final class OpenMissionControlCore: ObservableObject {
 
     private var overlayWindow: NSWindow?
     private var overlayContentView: NSHostingView<OverlayView>?
-    private let inactiveOverlayWindowSize = CGSize(width: 1, height: 1)
     private var previousWindowFrames: [CGWindowID: CGRect]?
     private(set) var overlayRect: CGRect?
     private(set) var hoveredWindow: [String: Any]?
@@ -423,8 +422,8 @@ final class OpenMissionControlCore: ObservableObject {
                     let newFrame = NSRect(
                         x: x, y: convertedY, width: windowWidth, height: windowHeight)
                     if let overlayWindow, let overlayContentView {
-                        overlayWindow.setFrame(newFrame, display: false, animate: false)
-                        overlayContentView.frame = overlayWindow.contentView?.bounds ?? .zero
+                        overlayContentView.frame = OverlayWindowPositioner.setFrame(
+                            newFrame, for: overlayWindow, cgOrigin: CGPoint(x: x, y: y))
                         overlayContentView.isHidden = false
                         overlayContentView.needsDisplay = true
                     }
@@ -649,9 +648,10 @@ final class OpenMissionControlCore: ObservableObject {
             return
         }
 
-        let inactiveFrame = CGRect(origin: desktopFrame.origin, size: inactiveOverlayWindowSize)
+        let initialFrame = CGRect(
+            origin: desktopFrame.origin, size: OverlayWindowPositioner.initialWindowSize)
         let window = NSWindow(
-            contentRect: inactiveFrame, styleMask: [.borderless], backing: .buffered, defer: false)
+            contentRect: initialFrame, styleMask: [.borderless], backing: .buffered, defer: false)
         window.level = .screenSaver
         window.collectionBehavior = [
             .canJoinAllSpaces, .stationary, .fullScreenAuxiliary, .ignoresCycle
@@ -659,10 +659,11 @@ final class OpenMissionControlCore: ObservableObject {
         window.backgroundColor = .clear
         window.isOpaque = false
         window.hasShadow = false
+        window.animationBehavior = .none
         window.ignoresMouseEvents = true
         window.isReleasedWhenClosed = false
 
-        let contentView = NSView(frame: NSRect(origin: .zero, size: inactiveFrame.size))
+        let contentView = NSView(frame: NSRect(origin: .zero, size: initialFrame.size))
         contentView.wantsLayer = true
         contentView.layer?.backgroundColor = NSColor.clear.cgColor
         window.contentView = contentView
@@ -675,7 +676,7 @@ final class OpenMissionControlCore: ObservableObject {
         overlayContentView = overlayView
 
         // The surface must be ordered before Mission Control starts.
-        // Keep it at one pixel while inactive so AppKit does not route desktop-wide mouse movement through its tracking areas.
+        // Keep it compact so it cannot obscure desktop previews or create desktop-wide tracking areas.
         window.orderFrontRegardless()
     }
 
