@@ -34,6 +34,9 @@ if !existingApps.isEmpty {
 MainActor.assumeIsolated {
     let appDelegate = AppDelegate(openSettingsOnLaunch: !existingApps.isEmpty)
     NSApplication.shared.delegate = appDelegate
-}
 
-_ = NSApplicationMain(CommandLine.argc, CommandLine.unsafeArgv)
+    // NSApplication holds its delegate weakly, so keep it alive while the app runs.
+    withExtendedLifetime(appDelegate) {
+        _ = NSApplicationMain(CommandLine.argc, CommandLine.unsafeArgv)
+    }
+}

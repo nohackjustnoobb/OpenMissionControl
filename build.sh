@@ -18,7 +18,7 @@ echo "Renaming app..."
 mv "build/Build/Products/Release/OpenMissionControl.app" "build/Build/Products/Release/Open Mission Control.app"
 
 echo "Creating DMG..."
-npx create-dmg "build/Build/Products/Release/Open Mission Control.app" --no-version-in-filename --overwrite --no-code-sign
+npx create-dmg "build/Build/Products/Release/Open Mission Control.app" --no-version-in-filename --overwrite --no-code-sign -y
 
 echo "Renaming DMG..."
 if [ -f "Open Mission Control.dmg" ]; then

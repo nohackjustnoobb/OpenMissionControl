@@ -30,6 +30,11 @@ import Foundation
         if openSettingsOnLaunch { SettingsViewManager.shared.showSettings() }
     }
 
+    func applicationShouldHandleReopen(_: NSApplication, hasVisibleWindows _: Bool) -> Bool {
+        SettingsViewManager.shared.showSettings()
+        return false
+    }
+
     func applicationWillTerminate(_: Notification) {
         if let userDefaultsObserver {
             NotificationCenter.default.removeObserver(userDefaultsObserver)
