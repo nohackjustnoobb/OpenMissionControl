@@ -17,8 +17,9 @@ class InputEventMonitor {
 
     // MARK: - Types
 
-    typealias ClickHandler = (_ location: CGPoint, _ buttonCode: CGMouseButton) -> Bool
-    typealias MouseDownHandler = (_ location: CGPoint, _ buttonCode: CGMouseButton) -> Void
+    typealias ClickHandler = (_ location: CGPoint, _ buttonCode: CGMouseButton, _ wasConsumed: Bool)
+        -> Void
+    typealias MouseDownHandler = (_ location: CGPoint, _ buttonCode: CGMouseButton) -> Bool
     typealias MoveHandler = (_ location: CGPoint) -> Void
     typealias KeyHandler = (_ flags: CGEventFlags, _ keyCode: CGKeyCode) -> Bool
 
@@ -40,6 +41,7 @@ class InputEventMonitor {
 
     fileprivate var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
+    private var consumedMouseButtons: Set<CGMouseButton> = []
 
     // MARK: - Move Monitoring (NSEvent)
 
@@ -62,7 +64,7 @@ class InputEventMonitor {
         isMonitoring = true
         lastMoveEventTimestamp = 0
 
-        startInputMonitoring()
+        if eventTap == nil { startInputMonitoring() }
         startMoveMonitoring()
 
         logger.info("Input event monitoring started.")
@@ -71,28 +73,30 @@ class InputEventMonitor {
     func stop() {
         guard isMonitoring else { return }
 
+        isMonitoring = false
         stopMoveMonitoring()
-        stopInputMonitoring()
+        // Keep the tap alive until it has consumed the releases for any captured presses.
+        if consumedMouseButtons.isEmpty { stopInputMonitoring() }
         lastMoveEventTimestamp = 0
 
-        isMonitoring = false
         logger.info("Input event monitoring stopped.")
     }
 
     // MARK: - Private: Input Monitoring
 
     private func startInputMonitoring() {
-        let eventMask =
+        let eventMask: CGEventMask =
             (1 << CGEventType.leftMouseDown.rawValue) | (1 << CGEventType.rightMouseDown.rawValue)
             | (1 << CGEventType.otherMouseDown.rawValue) | (1 << CGEventType.leftMouseUp.rawValue)
             | (1 << CGEventType.rightMouseUp.rawValue) | (1 << CGEventType.otherMouseUp.rawValue)
-            | (1 << CGEventType.keyDown.rawValue)
+            | (1 << CGEventType.leftMouseDragged.rawValue)
+            | (1 << CGEventType.rightMouseDragged.rawValue)
+            | (1 << CGEventType.otherMouseDragged.rawValue) | (1 << CGEventType.keyDown.rawValue)
 
         guard
             let tap = CGEvent.tapCreate(
                 tap: .cghidEventTap, place: .headInsertEventTap, options: .defaultTap,
-                eventsOfInterest: CGEventMask(eventMask), callback: inputEventMonitorCallback,
-                userInfo: nil)
+                eventsOfInterest: eventMask, callback: inputEventMonitorCallback, userInfo: nil)
         else {
             logger.error(
                 "Failed to create input event tap. Please grant Accessibility permissions.")
@@ -111,7 +115,8 @@ class InputEventMonitor {
     }
 
     private func stopInputMonitoring() {
-        if let tap = eventTap { CGEvent.tapEnable(tap: tap, enable: false) }
+        guard let tap = eventTap else { return }
+        CGEvent.tapEnable(tap: tap, enable: false)
 
         if let source = runLoopSource {
             CFRunLoopRemoveSource(CFRunLoopGetCurrent(), source, .commonModes)
@@ -151,14 +156,33 @@ class InputEventMonitor {
 
     // MARK: - Private Helpers
 
-    fileprivate func handleMouseDown(at location: CGPoint, with button: CGMouseButton) {
-        mouseDownHandler?(location, button)
+    // Mouse event handlers return true when the event should be consumed.
+    fileprivate func handleMouseDown(at location: CGPoint, with button: CGMouseButton) -> Bool {
+        if isMonitoring, mouseDownHandler?(location, button) == true {
+            consumedMouseButtons.insert(button)
+        }
+        return consumedMouseButtons.contains(button)
     }
 
-    /// Returns `true` if the event should be passed down the event chain, `false` to swallow it.
-    @discardableResult fileprivate func handleMouseUp(
-        at location: CGPoint, with button: CGMouseButton
-    ) -> Bool { return clickHandler?(location, button) ?? true }
+    fileprivate func handleMouseUp(at location: CGPoint, with button: CGMouseButton) -> Bool {
+        let wasConsumed = consumedMouseButtons.remove(button) != nil
+        if isMonitoring {
+            clickHandler?(location, button, wasConsumed)
+        } else if wasConsumed, consumedMouseButtons.isEmpty {
+            // Let the callback discard this release before disabling the tap.
+            DispatchQueue.main.async { [weak self] in
+                guard let self, !self.isMonitoring, self.consumedMouseButtons.isEmpty else {
+                    return
+                }
+                self.stopInputMonitoring()
+            }
+        }
+        return wasConsumed
+    }
+
+    fileprivate func shouldConsumeMouseDrag(for button: CGMouseButton) -> Bool {
+        consumedMouseButtons.contains(button)
+    }
 
     private func handleMove(to location: CGPoint, timestamp: TimeInterval) {
         let minimumInterval = max(0, mouseUpdateDuration)
@@ -172,6 +196,7 @@ class InputEventMonitor {
     }
 
     @discardableResult fileprivate func handleKey(flags: CGEventFlags, keyCode: CGKeyCode) -> Bool {
+        guard isMonitoring else { return true }
         return keyHandler?(flags, keyCode) ?? true
     }
 
@@ -185,41 +210,37 @@ class InputEventMonitor {
 private func inputEventMonitorCallback(
     proxy _: CGEventTapProxy, type: CGEventType, event: CGEvent, refcon _: UnsafeMutableRawPointer?
 ) -> Unmanaged<CGEvent>? {
+    let monitor = InputEventMonitor.shared
+
     // Re-enable tap if it was disabled by timeout or user input
     if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
-        if let tap = InputEventMonitor.shared.eventTap { CGEvent.tapEnable(tap: tap, enable: true) }
-        return Unmanaged.passRetained(event)
+        if let tap = monitor.eventTap { CGEvent.tapEnable(tap: tap, enable: true) }
+        return Unmanaged.passUnretained(event)
     }
 
-    if type == .leftMouseDown {
-        InputEventMonitor.shared.handleMouseDown(at: event.location, with: .left)
-    } else if type == .rightMouseDown {
-        InputEventMonitor.shared.handleMouseDown(at: event.location, with: .right)
-    } else if type == .otherMouseDown {
-        if let button = CGMouseButton(
-            rawValue: UInt32(event.getIntegerValueField(.mouseEventButtonNumber)))
-        {
-            InputEventMonitor.shared.handleMouseDown(at: event.location, with: button)
-        }
-    } else if type == .leftMouseUp {
-        let passUp = InputEventMonitor.shared.handleMouseUp(at: event.location, with: .left)
-        if !passUp { return nil }
-    } else if type == .rightMouseUp {
-        let passUp = InputEventMonitor.shared.handleMouseUp(at: event.location, with: .right)
-        if !passUp { return nil }
-    } else if type == .otherMouseUp {
-        if let button = CGMouseButton(
-            rawValue: UInt32(event.getIntegerValueField(.mouseEventButtonNumber)))
-        {
-            let passUp = InputEventMonitor.shared.handleMouseUp(at: event.location, with: button)
-            if !passUp { return nil }
-        }
-    } else if type == .keyDown {
+    if type == .keyDown {
         let flags = event.flags
         let keyCode = CGKeyCode(event.getIntegerValueField(.keyboardEventKeycode))
-        let passDown = InputEventMonitor.shared.handleKey(flags: flags, keyCode: keyCode)
-        if !passDown { return nil }
+        if !monitor.handleKey(flags: flags, keyCode: keyCode) { return nil }
+        return Unmanaged.passUnretained(event)
     }
 
-    return Unmanaged.passRetained(event)
+    let mouseButton: CGMouseButton?
+    switch type { case .leftMouseDown, .leftMouseUp, .leftMouseDragged: mouseButton = .left
+        case .rightMouseDown, .rightMouseUp, .rightMouseDragged: mouseButton = .right
+        case .otherMouseDown, .otherMouseUp, .otherMouseDragged:
+            mouseButton = CGMouseButton(
+                rawValue: UInt32(event.getIntegerValueField(.mouseEventButtonNumber)))
+        default: mouseButton = nil
+    }
+    guard let button = mouseButton else { return Unmanaged.passUnretained(event) }
+
+    let wasConsumed: Bool
+    switch type { case .leftMouseDown, .rightMouseDown, .otherMouseDown:
+        wasConsumed = monitor.handleMouseDown(at: event.location, with: button)
+        case .leftMouseUp, .rightMouseUp, .otherMouseUp:
+            wasConsumed = monitor.handleMouseUp(at: event.location, with: button)
+        default: wasConsumed = monitor.shouldConsumeMouseDrag(for: button)
+    }
+    return wasConsumed ? nil : Unmanaged.passUnretained(event)
 }

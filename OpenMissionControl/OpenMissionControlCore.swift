@@ -112,18 +112,19 @@ final class OpenMissionControlCore: ObservableObject {
         MissionControlMonitor.shared.start()
 
         // Configure input event monitor
-        InputEventMonitor.shared.setClickHandler { [weak self] location, button in
-            guard let self = self else { return true }
+        InputEventMonitor.shared.setClickHandler { [weak self] location, button, wasConsumed in
+            guard let self else { return }
 
             self.logger.debug(
                 "Mouse released at: \(location.x), \(location.y) (button: \(button.rawValue))")
-            return self.handleMouseClick(at: location, with: button)
+            self.handleMouseClick(at: location, with: button, wasConsumed: wasConsumed)
         }
         InputEventMonitor.shared.setMouseDownHandler { [weak self] location, button in
-            self?.logger
-                .debug(
-                    "Mouse pressed at: \(location.x), \(location.y) (button: \(button.rawValue))")
-            self?.handleMouseDown(at: location, with: button)
+            guard let self else { return false }
+
+            self.logger.debug(
+                "Mouse pressed at: \(location.x), \(location.y) (button: \(button.rawValue))")
+            return self.handleMouseDown(at: location, with: button)
         }
         InputEventMonitor.shared.setMoveHandler { [weak self] location in
             self?.logger.debug("Mouse moved to: \(location.x), \(location.y)")
@@ -178,57 +179,29 @@ final class OpenMissionControlCore: ObservableObject {
 
     // MARK: - Mouse Event Handling
 
-    @discardableResult private func handleMouseClick(
-        at location: CGPoint, with button: CGMouseButton
-    ) -> Bool {
+    private func handleMouseClick(
+        at location: CGPoint, with button: CGMouseButton, wasConsumed: Bool
+    ) {
         let wasButtonDown = activeMouseButtons.remove(button) != nil
-        guard wasButtonDown else { return true }
-
-        guard isOverlayShown else { return true }
+        guard wasButtonDown, isOverlayShown else { return }
 
         if let rect = overlayRect, rect.contains(location) {
-            if button == .left {
-                logger.debug(
-                    "Captured left click inside overlayRect at (\(location.x), \(location.y)).")
-                handleOverlayClick(at: location)
-                return false
-            } else {
-                logger.debug(
-                    "Captured non-left click inside overlayRect at (\(location.x), \(location.y)), skipping."
-                )
-                return true
-            }
+            if button == .left, wasConsumed { handleOverlayClick(at: location) }
+            return
         }
 
-        if let window = hoveredWindow {
-            switch button { case .left:
-                logger.debug(
-                    "Captured left click on hovered window at (\(location.x), \(location.y)).")
-                hideOverlay(keepInputMonitoring: true)
-                return true
-                case .right:
-                    logger.debug(
-                        "Captured right click on hovered window at (\(location.x), \(location.y)).")
-                    performWindowAction(
-                        window: window, action: rightClickAction, instigator: .mouse)
-                    return rightClickAction == .none
+        if wasConsumed {
+            guard let window = hoveredWindow else { return }
+            switch button { case .right:
+                performWindowAction(window: window, action: rightClickAction, instigator: .mouse)
                 case .center:
-                    logger.debug(
-                        "Captured middle click on hovered window at (\(location.x), \(location.y))."
-                    )
                     performWindowAction(
                         window: window, action: middleClickAction, instigator: .mouse)
-                    return middleClickAction == .none
-                default:
-                    logger.debug(
-                        "Captured non-default click (id \(button.rawValue)) on hovered window at (\(location.x), \(location.y)), skipping."
-                    )
-                    return true
+                default: break
             }
+        } else if button == .left || hoveredWindow == nil {
+            hideOverlay(keepInputMonitoring: true)
         }
-
-        hideOverlay(keepInputMonitoring: true)
-        return true
     }
 
     private func handleMouseMove(to location: CGPoint) {
@@ -237,7 +210,7 @@ final class OpenMissionControlCore: ObservableObject {
         updateOverlay(at: location)
     }
 
-    private func handleMouseDown(at location: CGPoint, with button: CGMouseButton) {
+    private func handleMouseDown(at location: CGPoint, with button: CGMouseButton) -> Bool {
         activeMouseButtons.insert(button)
 
         DispatchQueue.main.async { [weak self] in
@@ -248,6 +221,15 @@ final class OpenMissionControlCore: ObservableObject {
             // Keep the hit-test state until mouse-up, but hide the visual overlay while the button is held so a drag cannot cause it to reappear.
             overlayContentView?.isHidden = true
             isOverlayHovered = false
+        }
+
+        guard isOverlayShown else { return false }
+        if overlayRect?.contains(location) == true { return button == .left }
+        guard hoveredWindow != nil else { return false }
+
+        switch button { case .right: return rightClickAction != .none case .center:
+            return middleClickAction != .none
+            default: return false
         }
     }
 
