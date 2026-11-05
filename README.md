@@ -54,6 +54,16 @@ This repository includes a pre-commit hook that formats staged Swift files and i
 git config core.hooksPath .githooks
 ```
 
+## Troubleshooting
+
+### Permission appears missing after an update
+
+If Open Mission Control asks you to grant permission after an update even though System Settings shows it as enabled, remove the existing entry and grant access again.
+
+1. Quit Open Mission Control.
+2. In System Settings, open **Device Control and Data Access** on macOS 27 or **Accessibility** on earlier versions. Select **Open Mission Control** and remove it from the list.
+3. Reopen Open Mission Control and follow the prompt to grant permission again. If needed, open the app's settings and click **Grant** under **Permissions**.
+
 ## Credits
 
 This project stands on the shoulders of giants. Some parts of the code are borrowed from or inspired by the following amazing open-source projects:
