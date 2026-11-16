@@ -177,18 +177,21 @@ final class OpenMissionControlCore: ObservableObject {
     // MARK: - Active Space Change Handling
 
     @objc private func activeSpaceDidChange() {
-        guard isOverlayShown else { return }
-
-        logger.info("Active space changed, recreating windows and overlay.")
-
-        recreateOverlay()
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.logger.info("Active space changed, recreating overlay windows.")
+            self.destroyOverlayWindow()
+            self.prepareOverlayWindow()
+        }
     }
 
     @objc private func screenParametersDidChange() {
-        logger.info("Screen parameters changed, recreating overlay windows.")
-
-        destroyOverlayWindow()
-        prepareOverlayWindow()
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.logger.info("Screen parameters changed, recreating overlay windows.")
+            self.destroyOverlayWindow()
+            self.prepareOverlayWindow()
+        }
     }
 
     // MARK: - Mouse Event Handling
@@ -357,6 +360,7 @@ final class OpenMissionControlCore: ObservableObject {
     // MARK: - Overlay Management
 
     private struct OverlaySurface {
+        let screen: NSScreen
         let window: NSWindow
         let contentView: NSHostingView<OverlayView>
     }
@@ -425,17 +429,12 @@ final class OpenMissionControlCore: ObservableObject {
 
                     let targetSurface =
                         overlaySurfaces.first { surface in
-                            guard
-                                let screen = surface.window.screen
-                                    ?? NSScreen.screens.first(where: {
-                                        $0.frame.intersects(surface.window.frame)
-                                    })
-                            else { return false }
                             let cgScreenFrame = CGRect(
-                                x: screen.frame.origin.x,
-                                y: primaryScreenHeight - screen.frame.origin.y
-                                    - screen.frame.height, width: screen.frame.width,
-                                height: screen.frame.height)
+                                x: surface.screen.frame.origin.x,
+                                y: primaryScreenHeight - surface.screen.frame.origin.y
+                                    - surface.screen.frame.height,
+                                width: surface.screen.frame.width,
+                                height: surface.screen.frame.height)
                             return cgScreenFrame.contains(mouseLocation)
                                 || cgScreenFrame.intersects(windowFrame)
                         } ?? overlaySurfaces.first
@@ -593,6 +592,7 @@ final class OpenMissionControlCore: ObservableObject {
 
     func showOverlay() {
         prepareOverlayWindow()
+        for surface in overlaySurfaces { surface.window.orderFrontRegardless() }
 
         if windowFetchTimer == nil {
             previousWindowFrames = nil
@@ -657,6 +657,8 @@ final class OpenMissionControlCore: ObservableObject {
 
     func recreateOverlay() {
         hideOverlay(keepInputMonitoring: true)
+        destroyOverlayWindow()
+        prepareOverlayWindow()
         showOverlay()
     }
 
@@ -692,7 +694,8 @@ final class OpenMissionControlCore: ObservableObject {
             // The surface must be ordered before Mission Control starts.
             // Keep it compact so it cannot obscure desktop previews or create desktop-wide tracking areas.
             window.orderFrontRegardless()
-            overlaySurfaces.append(OverlaySurface(window: window, contentView: overlayView))
+            overlaySurfaces.append(
+                OverlaySurface(screen: screen, window: window, contentView: overlayView))
         }
     }
 
