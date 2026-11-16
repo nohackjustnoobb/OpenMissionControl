@@ -141,6 +141,11 @@ final class OpenMissionControlCore: ObservableObject {
             self, selector: #selector(activeSpaceDidChange),
             name: NSWorkspace.activeSpaceDidChangeNotification, object: nil)
 
+        // Listen for display changes to update per-screen overlay windows
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(screenParametersDidChange),
+            name: NSApplication.didChangeScreenParametersNotification, object: nil)
+
         logger.info("OpenMissionControlCore started.")
     }
 
@@ -150,6 +155,8 @@ final class OpenMissionControlCore: ObservableObject {
         MissionControlMonitor.shared.stop()
         InputEventMonitor.shared.stop()
         NSWorkspace.shared.notificationCenter.removeObserver(self)
+        NotificationCenter.default.removeObserver(
+            self, name: NSApplication.didChangeScreenParametersNotification, object: nil)
         hideOverlay()
         destroyOverlayWindow()
         isRunning = false
@@ -170,11 +177,21 @@ final class OpenMissionControlCore: ObservableObject {
     // MARK: - Active Space Change Handling
 
     @objc private func activeSpaceDidChange() {
-        guard isOverlayShown else { return }
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.logger.info("Active space changed, recreating overlay windows.")
+            self.destroyOverlayWindow()
+            self.prepareOverlayWindow()
+        }
+    }
 
-        logger.info("Active space changed, recreating windows and overlay.")
-
-        recreateOverlay()
+    @objc private func screenParametersDidChange() {
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.logger.info("Screen parameters changed, recreating overlay windows.")
+            self.destroyOverlayWindow()
+            self.prepareOverlayWindow()
+        }
     }
 
     // MARK: - Mouse Event Handling
@@ -219,7 +236,7 @@ final class OpenMissionControlCore: ObservableObject {
             guard overlayRect?.contains(location) != true else { return }
 
             // Keep the hit-test state until mouse-up, but hide the visual overlay while the button is held so a drag cannot cause it to reappear.
-            overlayContentView?.isHidden = true
+            for surface in overlaySurfaces { surface.contentView.isHidden = true }
             isOverlayHovered = false
         }
 
@@ -342,8 +359,13 @@ final class OpenMissionControlCore: ObservableObject {
 
     // MARK: - Overlay Management
 
-    private var overlayWindow: NSWindow?
-    private var overlayContentView: NSHostingView<OverlayView>?
+    private struct OverlaySurface {
+        let screen: NSScreen
+        let window: NSWindow
+        let contentView: NSHostingView<OverlayView>
+    }
+
+    private var overlaySurfaces: [OverlaySurface] = []
     private var previousWindowFrames: [CGWindowID: CGRect]?
     private(set) var overlayRect: CGRect?
     private(set) var hoveredWindow: [String: Any]?
@@ -377,8 +399,9 @@ final class OpenMissionControlCore: ObservableObject {
                 // Check if mouse is within this window's bounds
                 if windowFrame.contains(mouseLocation) {
                     // Convert CG top-left coordinates to NSWindow bottom-left coordinates
-                    let screenHeight =
-                        NSScreen.screens.first?.frame.height ?? NSScreen.main?.frame.height ?? 0
+                    let primaryScreenHeight =
+                        NSScreen.screens.first(where: { $0.frame.origin == .zero })?.frame.height
+                        ?? NSScreen.screens.first?.frame.height ?? 0
                     let sizing = OverlaySizing(scale: overlayButtonScale)
 
                     let showQuit =
@@ -399,15 +422,32 @@ final class OpenMissionControlCore: ObservableObject {
                     let overlayWidth = sizing.width(buttonCount: buttonCount)
                     let windowWidth = overlayWidth + 2 * sizing.margin
                     let windowHeight = sizing.height + 2 * sizing.margin
-                    let convertedY = screenHeight - y - windowHeight
+                    let convertedY = primaryScreenHeight - y - windowHeight
 
                     let newFrame = NSRect(
                         x: x, y: convertedY, width: windowWidth, height: windowHeight)
-                    if let overlayWindow, let overlayContentView {
-                        overlayContentView.frame = OverlayWindowPositioner.setFrame(
-                            newFrame, for: overlayWindow, cgOrigin: CGPoint(x: x, y: y))
-                        overlayContentView.isHidden = false
-                        overlayContentView.needsDisplay = true
+
+                    let targetSurface =
+                        overlaySurfaces.first { surface in
+                            let cgScreenFrame = CGRect(
+                                x: surface.screen.frame.origin.x,
+                                y: primaryScreenHeight - surface.screen.frame.origin.y
+                                    - surface.screen.frame.height,
+                                width: surface.screen.frame.width,
+                                height: surface.screen.frame.height)
+                            return cgScreenFrame.contains(mouseLocation)
+                                || cgScreenFrame.intersects(windowFrame)
+                        } ?? overlaySurfaces.first
+
+                    for surface in overlaySurfaces {
+                        if surface.window === targetSurface?.window, let targetSurface {
+                            targetSurface.contentView.frame = OverlayWindowPositioner.setFrame(
+                                newFrame, for: targetSurface.window, cgOrigin: CGPoint(x: x, y: y))
+                            targetSurface.contentView.isHidden = false
+                            targetSurface.contentView.needsDisplay = true
+                        } else {
+                            surface.contentView.isHidden = true
+                        }
                     }
 
                     let cgOverlayRect = CGRect(
@@ -421,7 +461,7 @@ final class OpenMissionControlCore: ObservableObject {
 
             hoveredWindow = nil
             overlayRect = nil
-            overlayContentView?.isHidden = true
+            for surface in overlaySurfaces { surface.contentView.isHidden = true }
         }
     }
 
@@ -552,6 +592,7 @@ final class OpenMissionControlCore: ObservableObject {
 
     func showOverlay() {
         prepareOverlayWindow()
+        for surface in overlaySurfaces { surface.window.orderFrontRegardless() }
 
         if windowFetchTimer == nil {
             previousWindowFrames = nil
@@ -573,7 +614,7 @@ final class OpenMissionControlCore: ObservableObject {
         isOverlayShown = framesAreStable
 
         guard framesAreStable else {
-            overlayContentView?.isHidden = true
+            for surface in overlaySurfaces { surface.contentView.isHidden = true }
             overlayRect = nil
             hoveredWindow = nil
             isOverlayHovered = false
@@ -601,7 +642,7 @@ final class OpenMissionControlCore: ObservableObject {
     func hideOverlay(keepInputMonitoring: Bool = false) {
         previousWindowFrames = nil
         isOverlayShown = false
-        overlayContentView?.isHidden = true
+        for surface in overlaySurfaces { surface.contentView.isHidden = true }
         overlayRect = nil
         hoveredWindow = nil
         isOverlayHovered = false
@@ -616,57 +657,54 @@ final class OpenMissionControlCore: ObservableObject {
 
     func recreateOverlay() {
         hideOverlay(keepInputMonitoring: true)
+        destroyOverlayWindow()
+        prepareOverlayWindow()
         showOverlay()
     }
 
     private func prepareOverlayWindow() {
-        guard overlayWindow == nil else { return }
+        guard overlaySurfaces.isEmpty else { return }
 
-        let desktopFrame = NSScreen.screens.reduce(CGRect.null) { frame, screen in
-            frame.union(screen.frame)
+        for screen in NSScreen.screens {
+            let initialFrame = CGRect(
+                origin: screen.frame.origin, size: OverlayWindowPositioner.initialWindowSize)
+            let window = NSWindow(
+                contentRect: initialFrame, styleMask: [.borderless], backing: .buffered,
+                defer: false)
+            window.level = .screenSaver
+            window.collectionBehavior = [
+                .canJoinAllSpaces, .stationary, .fullScreenAuxiliary, .ignoresCycle
+            ]
+            window.backgroundColor = .clear
+            window.isOpaque = false
+            window.hasShadow = false
+            window.animationBehavior = .none
+            window.ignoresMouseEvents = true
+            window.isReleasedWhenClosed = false
+
+            let contentView = NSView(frame: NSRect(origin: .zero, size: initialFrame.size))
+            contentView.wantsLayer = true
+            contentView.layer?.backgroundColor = NSColor.clear.cgColor
+            window.contentView = contentView
+
+            let overlayView = NSHostingView(rootView: OverlayView())
+            overlayView.isHidden = true
+            contentView.addSubview(overlayView)
+
+            // The surface must be ordered before Mission Control starts.
+            // Keep it compact so it cannot obscure desktop previews or create desktop-wide tracking areas.
+            window.orderFrontRegardless()
+            overlaySurfaces.append(
+                OverlaySurface(screen: screen, window: window, contentView: overlayView))
         }
-        guard !desktopFrame.isNull, !desktopFrame.isEmpty else {
-            logger.error("Could not determine the desktop frame for the overlay window.")
-            return
-        }
-
-        let initialFrame = CGRect(
-            origin: desktopFrame.origin, size: OverlayWindowPositioner.initialWindowSize)
-        let window = NSWindow(
-            contentRect: initialFrame, styleMask: [.borderless], backing: .buffered, defer: false)
-        window.level = .screenSaver
-        window.collectionBehavior = [
-            .canJoinAllSpaces, .stationary, .fullScreenAuxiliary, .ignoresCycle
-        ]
-        window.backgroundColor = .clear
-        window.isOpaque = false
-        window.hasShadow = false
-        window.animationBehavior = .none
-        window.ignoresMouseEvents = true
-        window.isReleasedWhenClosed = false
-
-        let contentView = NSView(frame: NSRect(origin: .zero, size: initialFrame.size))
-        contentView.wantsLayer = true
-        contentView.layer?.backgroundColor = NSColor.clear.cgColor
-        window.contentView = contentView
-
-        let overlayView = NSHostingView(rootView: OverlayView())
-        overlayView.isHidden = true
-        contentView.addSubview(overlayView)
-
-        overlayWindow = window
-        overlayContentView = overlayView
-
-        // The surface must be ordered before Mission Control starts.
-        // Keep it compact so it cannot obscure desktop previews or create desktop-wide tracking areas.
-        window.orderFrontRegardless()
     }
 
     private func destroyOverlayWindow() {
-        overlayContentView?.removeFromSuperview()
-        overlayContentView = nil
-        overlayWindow?.close()
-        overlayWindow = nil
+        for surface in overlaySurfaces {
+            surface.contentView.removeFromSuperview()
+            surface.window.close()
+        }
+        overlaySurfaces.removeAll()
     }
 
     private func restartApp() {
